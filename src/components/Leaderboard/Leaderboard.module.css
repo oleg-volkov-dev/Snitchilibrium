@@ -1,0 +1,88 @@
+.panel {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 12px;
+  min-width: 200px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d1d5db;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.row:hover {
+  background: #374151;
+}
+
+.selected {
+  background: #374151;
+  outline: 1px solid #6366f1;
+}
+
+.rank {
+  font-size: 11px;
+  color: #6b7280;
+  width: 24px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.name {
+  flex: 1;
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.resources {
+  font-size: 12px;
+  color: #fbbf24;
+  min-width: 28px;
+  text-align: right;
+}
+
+.healthBar {
+  width: 36px;
+  height: 4px;
+  background: #374151;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.healthFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.2s;
+}
+
+.deadCount {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+  padding-top: 6px;
+}
