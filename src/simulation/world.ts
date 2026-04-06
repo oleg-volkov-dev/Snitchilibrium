@@ -13,7 +13,7 @@ export function createGrid(config: WorldConfig): Cell[][] {
       if (r < obstacleDensity) {
         grid[y][x] = { type: 'obstacle' }
       } else if (r < obstacleDensity + resourceDensity) {
-        grid[y][x] = { type: 'resource', resourceAmount: Math.floor(randomFloat(10, 50)) }
+        grid[y][x] = { type: 'resource', resourceAmount: Math.floor(randomFloat(5, 20)) }
       }
     }
   }
@@ -43,11 +43,21 @@ export function isPassable(grid: Cell[][], pos: Position): boolean {
   return cell !== null && cell.type !== 'obstacle'
 }
 
-export function spawnResources(grid: Cell[][], rate: number): void {
+export function spawnResources(grid: Cell[][], rate: number, maxTotal = 20): void {
+  let current = 0
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      if (grid[y][x].type === 'resource') current++
+    }
+  }
+  if (current >= maxTotal) return
+
   for (let y = 0; y < grid.length; y++) {
     for (let x = 0; x < grid[y].length; x++) {
       if (grid[y][x].type === 'empty' && randomFloat() < rate) {
-        grid[y][x] = { type: 'resource', resourceAmount: Math.floor(randomFloat(5, 20)) }
+        grid[y][x] = { type: 'resource', resourceAmount: Math.floor(randomFloat(5, 15)) }
+        current++
+        if (current >= maxTotal) return
       }
     }
   }

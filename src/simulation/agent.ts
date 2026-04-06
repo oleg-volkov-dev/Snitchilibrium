@@ -82,11 +82,11 @@ export function decideAction(
   // Nearby agents (within 4 tiles)
   const nearbyOthers = liveOthers.filter(a => distance(a.position, agent.position) <= 4)
 
-  // Alliance offers: respect cooldown, only offer if trust earned or naturally trusting
+  // Alliance offers: respect cooldown (only applies after first offer, not to new contacts)
   const potentialAllies = nearbyOthers.filter(a => {
     const rel = agent.relations[a.id]
     if (rel?.allied) return false
-    if (tick - (rel?.lastOfferTick ?? 0) < OFFER_COOLDOWN) return false
+    if (rel?.lastOfferTick && tick - rel.lastOfferTick < OFFER_COOLDOWN) return false
     return (rel?.trust ?? 0) > 0.2 || traits.trust > 0.65
   })
 
@@ -106,10 +106,16 @@ export function decideAction(
     return distance(a.position, agent.position) === 1
   })
 
+  // Resentment toward an adjacent attacker raises effective aggression (wounded agents fight back)
+  const adjEnemy = attackCandidates[0]
+  const resentmentBoost = adjEnemy ? (agent.relations[adjEnemy.id]?.resentment ?? 0) * 0.4 : 0
+
   // Utility scoring
+  // Attack has a base floor (0.25) so even passive agents fight adjacent enemies.
+  // Aggression and resentment raise it further.
   const gatherUtility = resourceAdj ? traits.greed + noise() : 0
   const attackUtility = attackCandidates.length > 0
-    ? traits.aggression * (0.5 + traits.riskTolerance * 0.5) + noise()
+    ? 0.25 + traits.aggression * 0.65 + resentmentBoost + noise()
     : 0
   const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.5 + noise() : 0
   const betrayUtility = betrayalCandidates.length > 0
@@ -178,16 +184,29 @@ function findMoveTarget(
     return candidates.sort((a, b) => distance(a, nearestResource!) - distance(b, nearestResource!))[0]
   }
 
-  // 2. No resources anywhere: move toward nearest non-allied enemy
-  // All agents do this — aggression controls whether they actually attack, not whether they navigate
+  // 2. No resources anywhere: move toward nearest non-allied enemy.
+  // All agents navigate toward enemies regardless of aggression — the trait only controls
+  // whether they actually attack once adjacent, not whether they approach.
   const enemies = liveOthers.filter(a => !agent.relations[a.id]?.allied)
   if (enemies.length > 0) {
     const nearest = enemies.sort(
       (a, b) => distance(a.position, agent.position) - distance(b.position, agent.position)
     )[0]
-    return candidates.sort(
-      (a, b) => distance(a, nearest.position) - distance(b, nearest.position)
-    )[0]
+    // Sort by distance to target; break ties by preferring the axis that closes faster
+    // (reduces orbiting where two agents repeatedly step sideways past each other)
+    const dx = nearest.position.x - agent.position.x
+    const dy = nearest.position.y - agent.position.y
+    return candidates.sort((a, b) => {
+      const da = distance(a, nearest.position)
+      const db = distance(b, nearest.position)
+      if (da !== db) return da - db
+      // Tiebreak: prefer candidate that moves along the dominant axis
+      const aAlignX = Math.sign(a.x - agent.position.x) === Math.sign(dx) ? 1 : 0
+      const bAlignX = Math.sign(b.x - agent.position.x) === Math.sign(dx) ? 1 : 0
+      const aAlignY = Math.sign(a.y - agent.position.y) === Math.sign(dy) ? 1 : 0
+      const bAlignY = Math.sign(b.y - agent.position.y) === Math.sign(dy) ? 1 : 0
+      return (bAlignX + bAlignY) - (aAlignX + aAlignY)
+    })[0]
   }
 
   // 3. Only allies left: wander (standoff scenario — betrayal pressure will resolve it)

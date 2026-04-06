@@ -25,7 +25,8 @@ import {
   shuffle,
 } from './utils'
 
-const RESOURCE_SPAWN_RATE = 0.002
+// Per-cell per-tick probability. 600 cells × 0.00004 ≈ 1 new resource every 40 ticks.
+const RESOURCE_SPAWN_RATE = 0.00004
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 120
@@ -92,7 +93,8 @@ export function stepSimulation(state: SimulationState): SimulationState {
     applyAction(agent, action, agentById, newGrid, posMap, tick, newEvents)
   }
 
-  spawnResources(newGrid, RESOURCE_SPAWN_RATE)
+  const maxResources = Math.max(8, state.config.world.agentCount * 2)
+  spawnResources(newGrid, RESOURCE_SPAWN_RATE, maxResources)
 
   for (const a of newAgents) {
     if (a.health <= 0) {
