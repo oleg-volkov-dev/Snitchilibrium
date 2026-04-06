@@ -88,4 +88,6 @@ export interface SimulationState {
   grid: Cell[][]
   events: EventLogEntry[]
   config: SimulationConfig
+  winner: AgentState | null
+  story: string[]
 }

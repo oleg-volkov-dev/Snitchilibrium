@@ -4,11 +4,13 @@ import { Leaderboard } from './components/Leaderboard/Leaderboard'
 import { EventLog } from './components/EventLog/EventLog'
 import { AgentPanel } from './components/AgentPanel/AgentPanel'
 import { ConfigPanel } from './components/ConfigPanel/ConfigPanel'
+import { WinnerBanner } from './components/WinnerBanner/WinnerBanner'
 import styles from './App.module.css'
 
 export function App() {
   return (
     <div className={styles.app}>
+      <WinnerBanner />
       <header className={styles.header}>
         <h1 className={styles.title}>Snitchilibrium</h1>
         <p className={styles.subtitle}>

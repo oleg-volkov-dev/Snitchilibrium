@@ -52,6 +52,8 @@ export function createSimulation(config: SimulationConfig): SimulationState {
     grid,
     events: [],
     config,
+    winner: null,
+    story: [],
   }
 }
 
@@ -100,12 +102,19 @@ export function stepSimulation(state: SimulationState): SimulationState {
   const MAX_EVENTS = 200
   const allEvents = [...state.events, ...newEvents].slice(-MAX_EVENTS)
 
+  const stillAlive = newAgents.filter(a => a.alive)
+  const wasAlive = agents.filter(a => a.alive)
+  const justWon = stillAlive.length === 1 && wasAlive.length > 1
+
   return {
     ...state,
     tick: tick + 1,
+    running: justWon ? false : state.running,
     agents: newAgents,
     grid: newGrid,
     events: allEvents,
+    winner: justWon ? stillAlive[0] : state.winner,
+    story: justWon ? generateStory(allEvents, newAgents, tick + 1) : state.story,
   }
 }
 
@@ -275,4 +284,64 @@ export function getLeaderboard(agents: AgentState[]): AgentState[] {
   return [...agents]
     .filter(a => a.alive)
     .sort((a, b) => b.resources - a.resources)
+}
+
+function generateStory(events: EventLogEntry[], agents: AgentState[], totalTicks: number): string[] {
+  const lines: string[] = []
+
+  // First blood
+  const firstKill = events.find(e => e.action === 'attack' && e.description.includes('defeated'))
+  if (firstKill) {
+    lines.push(`First blood at tick ${firstKill.tick}: ${firstKill.description}`)
+  }
+
+  // Most kills
+  const killCounts: Record<string, number> = {}
+  for (const e of events) {
+    if (e.action === 'attack' && e.description.includes('defeated')) {
+      killCounts[e.agentId] = (killCounts[e.agentId] ?? 0) + 1
+    }
+  }
+  const topKiller = Object.entries(killCounts).sort((a, b) => b[1] - a[1])[0]
+  if (topKiller) {
+    const name = agents.find(a => a.id === topKiller[0])?.name ?? topKiller[0]
+    lines.push(`${name} was the most ruthless, claiming ${topKiller[1]} kills.`)
+  }
+
+  // Most betrayals committed
+  const betrayalCounts: Record<string, number> = {}
+  for (const e of events) {
+    if (e.action === 'betray-ally') {
+      betrayalCounts[e.agentId] = (betrayalCounts[e.agentId] ?? 0) + 1
+    }
+  }
+  const topBetrayer = Object.entries(betrayalCounts).sort((a, b) => b[1] - a[1])[0]
+  if (topBetrayer && topBetrayer[1] > 0) {
+    const name = agents.find(a => a.id === topBetrayer[0])?.name ?? topBetrayer[0]
+    lines.push(`${name} betrayed ${topBetrayer[1]} ally${topBetrayer[1] > 1 ? 'allies' : ''}, earning a reputation for treachery.`)
+  }
+
+  // Most alliances formed
+  const allianceCounts: Record<string, number> = {}
+  for (const e of events) {
+    if (e.action === 'accept-alliance') {
+      allianceCounts[e.agentId] = (allianceCounts[e.agentId] ?? 0) + 1
+      if (e.targetId) allianceCounts[e.targetId] = (allianceCounts[e.targetId] ?? 0) + 1
+    }
+  }
+  const mostDiplomatic = Object.entries(allianceCounts).sort((a, b) => b[1] - a[1])[0]
+  if (mostDiplomatic && mostDiplomatic[1] > 1) {
+    const name = agents.find(a => a.id === mostDiplomatic[0])?.name ?? mostDiplomatic[0]
+    lines.push(`${name} was the most diplomatic, forming ${mostDiplomatic[1]} alliances.`)
+  }
+
+  // Top resource gatherer
+  const topGatherer = [...agents].sort((a, b) => b.resources - a.resources)[0]
+  if (topGatherer) {
+    lines.push(`${topGatherer.name} survived with ${topGatherer.resources} resources.`)
+  }
+
+  lines.push(`The simulation ended after ${totalTicks} ticks.`)
+
+  return lines
 }

@@ -11,18 +11,20 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .btn {
-  padding: 6px 14px;
+  padding: 5px 10px;
   background: #374151;
   color: #f9fafb;
   border: 1px solid #4b5563;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   transition: background 0.15s;
+  white-space: nowrap;
 }
 
 .btn:hover:not(:disabled) {
