@@ -25,7 +25,10 @@ import {
   shuffle,
 } from './utils'
 
-const RESOURCE_SPAWN_RATE = 0.001
+const RESOURCE_SPAWN_RATE = 0.002
+
+// If all survivors are allied for this many ticks straight, they win together
+const STANDOFF_TIMEOUT = 120
 
 export function createSimulation(config: SimulationConfig): SimulationState {
   const grid = createGrid(config.world)
@@ -35,13 +38,7 @@ export function createSimulation(config: SimulationConfig): SimulationState {
   for (let i = 0; i < config.world.agentCount; i++) {
     const pos = positions[i] ?? { x: 0, y: 0 }
     const traits = randomizeTraits(config.world.defaultTraits)
-    const agent = createAgent(
-      `agent-${i}`,
-      generateAgentName(i),
-      pos,
-      agentColor(i),
-      traits
-    )
+    const agent = createAgent(`agent-${i}`, generateAgentName(i), pos, agentColor(i), traits)
     agents.push(agent)
   }
 
@@ -52,13 +49,18 @@ export function createSimulation(config: SimulationConfig): SimulationState {
     grid,
     events: [],
     config,
-    winner: null,
+    winners: [],
     story: [],
+    standoffSince: 0,
   }
 }
 
 export function stepSimulation(state: SimulationState): SimulationState {
-  const { agents, grid, tick, config } = state
+  const { agents, grid, tick } = state
+
+  // Don't step if already over
+  if (state.winners.length > 0) return state
+
   const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
   const newAgents = agents.map(a => ({
     ...a,
@@ -71,7 +73,6 @@ export function stepSimulation(state: SimulationState): SimulationState {
 
   const liveAgents = newAgents.filter(a => a.alive)
 
-  // Build position map for collision detection
   const posMap = new Map<string, string>()
   for (const a of liveAgents) {
     posMap.set(`${a.position.x},${a.position.y}`, a.id)
@@ -79,19 +80,20 @@ export function stepSimulation(state: SimulationState): SimulationState {
 
   const agentById = new Map(newAgents.map(a => [a.id, a]))
 
+  // Compute standoff pressure for this tick
+  const standoffPressure = state.standoffSince > 0
+    ? clamp((tick - state.standoffSince) / STANDOFF_TIMEOUT, 0, 1)
+    : 0
+
   for (const agent of shuffle(liveAgents)) {
     if (!agent.alive) continue
-
-    updateRelations(agent, tick)
-
-    const action = decideAction(agent, liveAgents, newGrid, tick)
+    updateRelations(agent)
+    const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure)
     applyAction(agent, action, agentById, newGrid, posMap, tick, newEvents)
   }
 
-  // Respawn resources slowly
   spawnResources(newGrid, RESOURCE_SPAWN_RATE)
 
-  // Kill agents with 0 health
   for (const a of newAgents) {
     if (a.health <= 0) {
       a.alive = false
@@ -99,22 +101,54 @@ export function stepSimulation(state: SimulationState): SimulationState {
     }
   }
 
-  const MAX_EVENTS = 200
+  const MAX_EVENTS = 300
   const allEvents = [...state.events, ...newEvents].slice(-MAX_EVENTS)
 
   const stillAlive = newAgents.filter(a => a.alive)
-  const wasAlive = agents.filter(a => a.alive)
-  const justWon = stillAlive.length === 1 && wasAlive.length > 1
+  const prevAlive = agents.filter(a => a.alive)
+
+  // Check win conditions
+  let winners: AgentState[] = []
+  let newStandoffSince = state.standoffSince
+
+  if (stillAlive.length === 1 && prevAlive.length > 1) {
+    // Solo win
+    winners = [stillAlive[0]]
+  } else if (stillAlive.length === 0) {
+    // Everyone died simultaneously — no winner
+    winners = []
+  } else if (stillAlive.length >= 2) {
+    const allMutuallyAllied = stillAlive.every(a =>
+      stillAlive.filter(b => b.id !== a.id).every(b => a.relations[b.id]?.allied)
+    )
+
+    if (allMutuallyAllied) {
+      if (state.standoffSince === 0) {
+        newStandoffSince = tick
+      } else if (tick - state.standoffSince >= STANDOFF_TIMEOUT) {
+        // Alliance wins together
+        winners = stillAlive
+      }
+    } else {
+      newStandoffSince = 0
+    }
+  }
+
+  const isOver = winners.length > 0
+  const story = isOver
+    ? generateStory(allEvents, newAgents, tick + 1, winners)
+    : state.story
 
   return {
     ...state,
     tick: tick + 1,
-    running: justWon ? false : state.running,
+    running: isOver ? false : state.running,
     agents: newAgents,
     grid: newGrid,
     events: allEvents,
-    winner: justWon ? stillAlive[0] : state.winner,
-    story: justWon ? generateStory(allEvents, newAgents, tick + 1) : state.story,
+    winners,
+    story,
+    standoffSince: newStandoffSince,
   }
 }
 
@@ -178,22 +212,31 @@ function applyAction(
       if (!target || !target.alive) break
       if (distance(agent.position, target.position) > 1) break
 
-      const attackPower = 15 + randomFloat(-5, 10) * agent.traits.aggression
+      // Base damage
+      let attackPower = 10 + randomFloat(0, 10) * (0.5 + agent.traits.aggression * 0.5)
       const defense = target.defending ? 0.5 : 1
-      const damage = Math.round(attackPower * defense)
 
+      // Alliance combat bonus: each allied agent adjacent to the target adds +25% damage
+      const allLive = Array.from(agentById.values()).filter(a => a.alive)
+      const supportingAllies = allLive.filter(
+        a => a.id !== agent.id && agent.relations[a.id]?.allied && distance(a.position, target.position) <= 1
+      )
+      if (supportingAllies.length > 0) {
+        attackPower *= 1 + supportingAllies.length * 0.25
+        log('support-ally', `${supportingAllies.map(a => a.name).join(', ')} supported ${agent.name}'s attack`)
+      }
+
+      const damage = Math.round(attackPower * defense)
       target.health = clamp(target.health - damage, 0, 100)
-      modifyResentment(target, agent.id, 0.3)
-      modifyTrust(target, agent.id, -0.4)
-      modifyResentment(agent, target.id, -0.1)
+      modifyResentment(target, agent.id, 0.25)
+      modifyTrust(target, agent.id, -0.3)
 
       // Break alliance if one existed
       const rel = getOrInitRelation(target, agent.id)
       if (rel.allied) {
         rel.allied = false
-        const agentRel = getOrInitRelation(agent, target.id)
-        agentRel.allied = false
-        modifyResentment(target, agent.id, 0.4)
+        getOrInitRelation(agent, target.id).allied = false
+        modifyResentment(target, agent.id, 0.5)
         log('betray-ally', `${agent.name} attacked ally ${target.name}!`, target.id)
       } else {
         log('attack', `${agent.name} attacked ${target.name} for ${damage} damage`, target.id)
@@ -217,20 +260,22 @@ function applyAction(
       const target = agentById.get(action.targetId)
       if (!target || !target.alive) break
 
+      const agentRel = getOrInitRelation(agent, action.targetId)
+      agentRel.lastOfferTick = tick
+
       const targetRel = getOrInitRelation(target, agent.id)
-      const acceptChance = target.traits.trust + targetRel.trust * 0.3
+      const acceptChance = target.traits.trust * 0.7 + Math.max(0, targetRel.trust) * 0.3
 
       if (randomFloat() < acceptChance) {
-        const agentRel = getOrInitRelation(agent, target.id)
         agentRel.allied = true
         agentRel.allianceTick = tick
         targetRel.allied = true
         targetRel.allianceTick = tick
-        modifyTrust(agent, target.id, 0.3)
-        modifyTrust(target, agent.id, 0.3)
+        modifyTrust(agent, target.id, 0.25)
+        modifyTrust(target, agent.id, 0.25)
         log('accept-alliance', `${target.name} accepted ${agent.name}'s alliance offer`, target.id)
       } else {
-        modifyTrust(agent, target.id, -0.1)
+        modifyTrust(agent, target.id, -0.05)
         log('reject-alliance', `${target.name} rejected ${agent.name}'s alliance offer`, target.id)
       }
       break
@@ -241,24 +286,20 @@ function applyAction(
       const target = agentById.get(action.targetId)
       if (!target || !target.alive) break
 
-      const agentRel = getOrInitRelation(agent, target.id)
-      const targetRel = getOrInitRelation(target, agent.id)
+      getOrInitRelation(agent, target.id).allied = false
+      getOrInitRelation(target, agent.id).allied = false
 
-      agentRel.allied = false
-      targetRel.allied = false
-
-      const stolen = Math.floor(target.resources * 0.3)
+      const stolen = Math.floor(target.resources * 0.35)
       agent.resources += stolen
-      target.resources -= stolen
+      target.resources = Math.max(0, target.resources - stolen)
 
-      modifyResentment(target, agent.id, 0.8)
-      modifyTrust(target, agent.id, -0.8)
-      modifyResentment(agent, target.id, 0.1)
+      modifyResentment(target, agent.id, 0.9)
+      modifyTrust(target, agent.id, -0.9)
 
-      // Spread reputation damage
+      // Reputation damage — others trust the betrayer less
       for (const other of agentById.values()) {
         if (other.id !== agent.id && other.id !== target.id && other.alive) {
-          modifyTrust(other, agent.id, -0.1)
+          modifyTrust(other, agent.id, -0.15)
         }
       }
 
@@ -286,16 +327,45 @@ export function getLeaderboard(agents: AgentState[]): AgentState[] {
     .sort((a, b) => b.resources - a.resources)
 }
 
-function generateStory(events: EventLogEntry[], agents: AgentState[], totalTicks: number): string[] {
+export function getActiveAlliances(agents: AgentState[]): Array<{ a: AgentState; b: AgentState; since: number }> {
+  const pairs: Array<{ a: AgentState; b: AgentState; since: number }> = []
+  const seen = new Set<string>()
+  for (const agent of agents) {
+    if (!agent.alive) continue
+    for (const [targetId, rel] of Object.entries(agent.relations)) {
+      if (!rel.allied) continue
+      const key = [agent.id, targetId].sort().join('|')
+      if (seen.has(key)) continue
+      seen.add(key)
+      const target = agents.find(a => a.id === targetId)
+      if (target?.alive) {
+        pairs.push({ a: agent, b: target, since: rel.allianceTick })
+      }
+    }
+  }
+  return pairs.sort((x, y) => x.since - y.since)
+}
+
+function generateStory(
+  events: EventLogEntry[],
+  agents: AgentState[],
+  totalTicks: number,
+  winners: AgentState[]
+): string[] {
   const lines: string[] = []
 
-  // First blood
+  if (winners.length === 1) {
+    lines.push(`${winners[0].name} was the last agent standing.`)
+  } else {
+    const names = winners.map(w => w.name).join(' and ')
+    lines.push(`${names} formed an unbreakable alliance and won together.`)
+  }
+
   const firstKill = events.find(e => e.action === 'attack' && e.description.includes('defeated'))
   if (firstKill) {
     lines.push(`First blood at tick ${firstKill.tick}: ${firstKill.description}`)
   }
 
-  // Most kills
   const killCounts: Record<string, number> = {}
   for (const e of events) {
     if (e.action === 'attack' && e.description.includes('defeated')) {
@@ -305,10 +375,9 @@ function generateStory(events: EventLogEntry[], agents: AgentState[], totalTicks
   const topKiller = Object.entries(killCounts).sort((a, b) => b[1] - a[1])[0]
   if (topKiller) {
     const name = agents.find(a => a.id === topKiller[0])?.name ?? topKiller[0]
-    lines.push(`${name} was the most ruthless, claiming ${topKiller[1]} kills.`)
+    lines.push(`${name} was the most ruthless with ${topKiller[1]} kills.`)
   }
 
-  // Most betrayals committed
   const betrayalCounts: Record<string, number> = {}
   for (const e of events) {
     if (e.action === 'betray-ally') {
@@ -318,30 +387,14 @@ function generateStory(events: EventLogEntry[], agents: AgentState[], totalTicks
   const topBetrayer = Object.entries(betrayalCounts).sort((a, b) => b[1] - a[1])[0]
   if (topBetrayer && topBetrayer[1] > 0) {
     const name = agents.find(a => a.id === topBetrayer[0])?.name ?? topBetrayer[0]
-    lines.push(`${name} betrayed ${topBetrayer[1]} ally${topBetrayer[1] > 1 ? 'allies' : ''}, earning a reputation for treachery.`)
+    lines.push(`${name} betrayed ${topBetrayer[1]} ${topBetrayer[1] === 1 ? 'ally' : 'allies'}.`)
   }
 
-  // Most alliances formed
-  const allianceCounts: Record<string, number> = {}
-  for (const e of events) {
-    if (e.action === 'accept-alliance') {
-      allianceCounts[e.agentId] = (allianceCounts[e.agentId] ?? 0) + 1
-      if (e.targetId) allianceCounts[e.targetId] = (allianceCounts[e.targetId] ?? 0) + 1
-    }
-  }
-  const mostDiplomatic = Object.entries(allianceCounts).sort((a, b) => b[1] - a[1])[0]
-  if (mostDiplomatic && mostDiplomatic[1] > 1) {
-    const name = agents.find(a => a.id === mostDiplomatic[0])?.name ?? mostDiplomatic[0]
-    lines.push(`${name} was the most diplomatic, forming ${mostDiplomatic[1]} alliances.`)
-  }
-
-  // Top resource gatherer
   const topGatherer = [...agents].sort((a, b) => b.resources - a.resources)[0]
   if (topGatherer) {
-    lines.push(`${topGatherer.name} survived with ${topGatherer.resources} resources.`)
+    lines.push(`${topGatherer.name} ended with ${topGatherer.resources} resources.`)
   }
 
-  lines.push(`The simulation ended after ${totalTicks} ticks.`)
-
+  lines.push(`Simulation lasted ${totalTicks} ticks.`)
   return lines
 }

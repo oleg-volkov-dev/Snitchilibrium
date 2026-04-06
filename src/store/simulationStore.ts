@@ -51,7 +51,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   reset: () => {
     const { config } = get()
-    set({ simulation: createSimulation(config) })
+    set({ simulation: createSimulation(config), selectedAgentId: null })
   },
 
   step: () => {

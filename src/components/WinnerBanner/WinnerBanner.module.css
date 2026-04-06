@@ -21,10 +21,43 @@
   gap: 12px;
 }
 
+.dots {
+  display: flex;
+  gap: 8px;
+}
+
 .winnerDot {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+}
+
+.standoffBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #1f2937;
+  border-bottom: 1px solid #374151;
+  padding: 8px 20px;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.standoffText {
+  font-size: 13px;
+  color: #fbbf24;
+  position: relative;
+  z-index: 1;
+}
+
+.standoffProgress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #f97316;
+  transition: width 0.3s;
 }
 
 .title {

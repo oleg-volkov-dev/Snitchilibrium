@@ -36,11 +36,12 @@ export interface AgentTraits {
 }
 
 export interface RelationEntry {
-  trust: number       // -1 to 1
-  resentment: number  // 0 to 1
+  trust: number          // -1 to 1
+  resentment: number     // 0 to 1
   allied: boolean
   allianceTick: number
   interactionCount: number
+  lastOfferTick: number  // cooldown: don't spam alliance offers
 }
 
 export interface AgentState {
@@ -88,6 +89,7 @@ export interface SimulationState {
   grid: Cell[][]
   events: EventLogEntry[]
   config: SimulationConfig
-  winner: AgentState | null
+  winners: AgentState[]      // 1 = solo win, 2+ = alliance win
   story: string[]
+  standoffSince: number      // tick when all survivors became allied (0 = no standoff)
 }

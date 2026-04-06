@@ -1,29 +1,7 @@
-.panel {
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #d1d5db;
-  margin: 0 0 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-}
-
 .list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  overflow-y: auto;
-  max-height: 300px;
   font-size: 12px;
 }
 
@@ -38,6 +16,7 @@
   color: #4b5563;
   min-width: 32px;
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .dot {

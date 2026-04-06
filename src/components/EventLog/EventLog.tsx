@@ -26,19 +26,16 @@ function EntryRow({ entry }: { entry: EventLogEntry }) {
 
 export function EventLog() {
   const events = useSimulationStore(s => s.simulation.events)
-  const visible = [...events].reverse().slice(0, 60)
+  const visible = [...events].reverse().slice(0, 80)
 
   return (
-    <div className={styles.panel}>
-      <h3 className={styles.title}>Event Log</h3>
-      <div className={styles.list}>
-        {visible.length === 0 && (
-          <div className={styles.empty}>No events yet</div>
-        )}
-        {visible.map((e, i) => (
-          <EntryRow key={i} entry={e} />
-        ))}
-      </div>
+    <div className={styles.list}>
+      {visible.length === 0 && (
+        <div className={styles.empty}>No events yet</div>
+      )}
+      {visible.map((e, i) => (
+        <EntryRow key={i} entry={e} />
+      ))}
     </div>
   )
 }

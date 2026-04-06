@@ -18,6 +18,12 @@ const DEFAULT_TRAITS: AgentTraits = {
   irrationality: 0.1,
 }
 
+// How long before an agent can re-offer alliance to the same person after rejection
+const OFFER_COOLDOWN = 40
+
+// After an alliance lasts this many ticks, betrayal pressure starts building
+const ALLIANCE_PRESSURE_START = 60
+
 export function createAgent(
   id: string,
   name: string,
@@ -47,6 +53,7 @@ export function getOrInitRelation(agent: AgentState, targetId: string): Relation
       allied: false,
       allianceTick: 0,
       interactionCount: 0,
+      lastOfferTick: 0,
     }
   }
   return agent.relations[targetId]
@@ -56,56 +63,59 @@ export function decideAction(
   agent: AgentState,
   allAgents: AgentState[],
   grid: Cell[][],
-  _tick: number
+  tick: number,
+  standoffPressure: number // 0-1, increases betrayal temptation
 ): AgentAction {
   const { traits } = agent
   const width = grid[0].length
   const height = grid.length
 
-  const noise = () => (Math.random() - 0.5) * traits.irrationality
+  const noise = () => (Math.random() - 0.5) * traits.irrationality * 2
 
-  const liveEnemies = allAgents.filter(a => a.alive && a.id !== agent.id)
-  const occupied = new Set(liveEnemies.map(a => `${a.position.x},${a.position.y}`))
+  const liveOthers = allAgents.filter(a => a.alive && a.id !== agent.id)
+  const occupied = new Set(liveOthers.map(a => `${a.position.x},${a.position.y}`))
   const adjPositions = adjacentPositions(agent.position, width, height)
 
-  // Check adjacent resources
-  const resourceAdj = adjPositions.find(
-    p => grid[p.y][p.x].type === 'resource'
-  )
+  // Adjacent resource
+  const resourceAdj = adjPositions.find(p => grid[p.y][p.x].type === 'resource')
 
   // Nearby agents (within 4 tiles)
-  const nearbyAgents = liveEnemies.filter(a => distance(a.position, agent.position) <= 4)
+  const nearbyOthers = liveOthers.filter(a => distance(a.position, agent.position) <= 4)
 
-  // Alliance opportunities
-  const potentialAllies = nearbyAgents.filter(a => {
-    const rel = agent.relations[a.id]
-    return !rel?.allied && (rel?.trust ?? 0) > 0.3
-  })
-
-  // Betrayal candidates
-  const betrayalCandidates = liveEnemies.filter(a => {
-    const rel = agent.relations[a.id]
-    return rel?.allied && (1 - traits.loyalty + noise()) > 0.6 && a.resources > agent.resources * 0.5
-  })
-
-  // Attack candidates adjacent
-  const attackCandidates = nearbyAgents.filter(a => {
+  // Alliance offers: respect cooldown, only offer if trust earned or naturally trusting
+  const potentialAllies = nearbyOthers.filter(a => {
     const rel = agent.relations[a.id]
     if (rel?.allied) return false
+    if (tick - (rel?.lastOfferTick ?? 0) < OFFER_COOLDOWN) return false
+    return (rel?.trust ?? 0) > 0.2 || traits.trust > 0.65
+  })
+
+  // Betrayal: old alliances get pressure from standoff and time
+  const betrayalCandidates = liveOthers.filter(a => {
+    const rel = agent.relations[a.id]
+    if (!rel?.allied) return false
+    const allianceAge = tick - rel.allianceTick
+    const agePressure = Math.max(0, (allianceAge - ALLIANCE_PRESSURE_START) / 100)
+    const totalPressure = clamp((1 - traits.loyalty) + agePressure + standoffPressure * 0.5 + noise(), 0, 1)
+    return totalPressure > 0.55
+  })
+
+  // Attack: adjacent non-allied enemies
+  const attackCandidates = nearbyOthers.filter(a => {
+    if (agent.relations[a.id]?.allied) return false
     return distance(a.position, agent.position) === 1
   })
 
-  // --- Utility scoring ---
+  // Utility scoring
   const gatherUtility = resourceAdj ? traits.greed + noise() : 0
-  const attackUtility =
-    attackCandidates.length > 0 ? traits.aggression * traits.riskTolerance + noise() : 0
-  const allianceUtility =
-    potentialAllies.length > 0 ? traits.trust * 0.6 + noise() : 0
-  const betrayUtility =
-    betrayalCandidates.length > 0
-      ? (1 - traits.loyalty) * traits.greed + noise()
-      : 0
-  const moveUtility = 0.3 + noise()
+  const attackUtility = attackCandidates.length > 0
+    ? traits.aggression * (0.5 + traits.riskTolerance * 0.5) + noise()
+    : 0
+  const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.5 + noise() : 0
+  const betrayUtility = betrayalCandidates.length > 0
+    ? (1 - traits.loyalty) * 0.7 + standoffPressure * 0.3 + noise()
+    : 0
+  const moveUtility = 0.35 + noise()
 
   const best = Math.max(gatherUtility, attackUtility, allianceUtility, betrayUtility, moveUtility)
 
@@ -114,7 +124,9 @@ export function decideAction(
   }
 
   if (best === betrayUtility && betrayalCandidates.length > 0) {
-    return { type: 'betray-ally', targetId: betrayalCandidates[0].id }
+    // Betray whoever has the most resources
+    const target = betrayalCandidates.sort((a, b) => b.resources - a.resources)[0]
+    return { type: 'betray-ally', targetId: target.id }
   }
 
   if (best === attackUtility && attackCandidates.length > 0) {
@@ -126,91 +138,77 @@ export function decideAction(
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  // Move: toward resource, enemy (if aggressive), or wander
-  const moveTarget = findMoveTarget(agent, grid, liveEnemies, occupied, width, height)
+  const moveTarget = findMoveTarget(agent, grid, liveOthers, occupied, width, height)
   return { type: 'move', targetPos: moveTarget }
 }
 
 function findMoveTarget(
   agent: AgentState,
   grid: Cell[][],
-  liveAgents: AgentState[],
+  liveOthers: AgentState[],
   occupied: Set<string>,
   width: number,
   height: number
 ): Position {
-  // Free adjacent cells (not obstacle, not occupied by another agent)
+  // Prefer free adjacent cells; fall back to any walkable cell if boxed in
   const freeAdj = adjacentPositions(agent.position, width, height).filter(
     p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`)
   )
-
-  // Any adjacent cell that could unblock (include occupied if nothing else)
   const walkableAdj = adjacentPositions(agent.position, width, height).filter(
     p => grid[p.y][p.x].type !== 'obstacle'
   )
-
   const candidates = freeAdj.length > 0 ? freeAdj : walkableAdj
-
   if (candidates.length === 0) return agent.position
 
   // 1. Move toward nearest resource
-  let bestTarget: Position | null = null
-  let bestDist = Infinity
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+  let nearestResource: Position | null = null
+  let nearestResourceDist = Infinity
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[0].length; x++) {
       if (grid[y][x].type === 'resource') {
         const d = distance({ x, y }, agent.position)
-        if (d < bestDist) {
-          bestDist = d
-          bestTarget = { x, y }
+        if (d < nearestResourceDist) {
+          nearestResourceDist = d
+          nearestResource = { x, y }
         }
       }
     }
   }
-
-  if (bestTarget) {
-    return candidates.sort((a, b) => distance(a, bestTarget!) - distance(b, bestTarget!))[0]
+  if (nearestResource) {
+    return candidates.sort((a, b) => distance(a, nearestResource!) - distance(b, nearestResource!))[0]
   }
 
-  // 2. No resources — aggressive agents chase nearest enemy, others wander
-  if (agent.traits.aggression > 0.4 && liveAgents.length > 0) {
-    const nearestEnemy = liveAgents
-      .filter(a => !agent.relations[a.id]?.allied)
-      .sort((a, b) => distance(a.position, agent.position) - distance(b.position, agent.position))[0]
-    if (nearestEnemy) {
-      return candidates.sort(
-        (a, b) => distance(a, nearestEnemy.position) - distance(b, nearestEnemy.position)
-      )[0]
-    }
+  // 2. No resources anywhere: move toward nearest non-allied enemy
+  // All agents do this — aggression controls whether they actually attack, not whether they navigate
+  const enemies = liveOthers.filter(a => !agent.relations[a.id]?.allied)
+  if (enemies.length > 0) {
+    const nearest = enemies.sort(
+      (a, b) => distance(a.position, agent.position) - distance(b.position, agent.position)
+    )[0]
+    return candidates.sort(
+      (a, b) => distance(a, nearest.position) - distance(b, nearest.position)
+    )[0]
   }
 
-  // 3. Wander randomly
+  // 3. Only allies left: wander (standoff scenario — betrayal pressure will resolve it)
   return shuffle(candidates)[0]
 }
 
-export function updateRelations(agent: AgentState, _tick: number): void {
-  const memoryDecay = 1 - agent.traits.memory * 0.005
+export function updateRelations(agent: AgentState): void {
+  const memoryDecay = 1 - agent.traits.memory * 0.004
   for (const rel of Object.values(agent.relations)) {
     rel.trust = clamp(rel.trust * memoryDecay, -1, 1)
     rel.resentment = clamp(rel.resentment * memoryDecay, 0, 1)
   }
 }
 
-export function modifyTrust(
-  agent: AgentState,
-  targetId: string,
-  delta: number
-): void {
+export function modifyTrust(agent: AgentState, targetId: string, delta: number): void {
   const rel = getOrInitRelation(agent, targetId)
   rel.trust = clamp(rel.trust + delta, -1, 1)
   rel.interactionCount++
 }
 
-export function modifyResentment(
-  agent: AgentState,
-  targetId: string,
-  delta: number
-): void {
+export function modifyResentment(agent: AgentState, targetId: string, delta: number): void {
   const rel = getOrInitRelation(agent, targetId)
   rel.resentment = clamp(rel.resentment + delta, 0, 1)
 }
@@ -224,6 +222,6 @@ export function randomizeTraits(base: Partial<AgentTraits> = {}): AgentTraits {
     greed: base.greed ?? rand(),
     riskTolerance: base.riskTolerance ?? rand(),
     memory: base.memory ?? rand(),
-    irrationality: base.irrationality ?? clamp(randomFloat(0, 0.4), 0, 1),
+    irrationality: base.irrationality ?? clamp(randomFloat(0, 0.35), 0, 1),
   }
 }
