@@ -184,11 +184,20 @@ function applyAction(
     case 'move': {
       if (!action.targetPos) break
       const key = `${action.targetPos.x},${action.targetPos.y}`
-      if (!posMap.has(key) && grid[action.targetPos.y]?.[action.targetPos.x]?.type !== 'obstacle') {
+      const destCell = grid[action.targetPos.y]?.[action.targetPos.x]
+      if (!posMap.has(key) && destCell?.type !== 'obstacle') {
         posMap.delete(`${agent.position.x},${agent.position.y}`)
         agent.prevPosition = { ...agent.position }
         agent.position = action.targetPos
         posMap.set(key, agent.id)
+        // Auto-collect resource on landing
+        if (destCell?.type === 'resource' && (destCell.resourceAmount ?? 0) > 0) {
+          const amount = destCell.resourceAmount ?? 0
+          agent.resources += amount
+          destCell.type = 'empty'
+          delete destCell.resourceAmount
+          log('gather', `${agent.name} picked up ${amount} resources`, undefined)
+        }
       }
       break
     }
@@ -197,13 +206,10 @@ function applyAction(
       const pos = action.targetPos ?? agent.position
       const cell = cellAt(grid, pos)
       if (cell?.type === 'resource' && (cell.resourceAmount ?? 0) > 0) {
-        const amount = Math.min(cell.resourceAmount ?? 0, 10)
-        cell.resourceAmount = (cell.resourceAmount ?? 0) - amount
-        if ((cell.resourceAmount ?? 0) <= 0) {
-          cell.type = 'empty'
-          delete cell.resourceAmount
-        }
+        const amount = cell.resourceAmount ?? 0
         agent.resources += amount
+        cell.type = 'empty'
+        delete cell.resourceAmount
         log('gather', `${agent.name} gathered ${amount} resources`)
       }
       break
@@ -267,7 +273,7 @@ function applyAction(
       agentRel.lastOfferTick = tick
 
       const targetRel = getOrInitRelation(target, agent.id)
-      const acceptChance = target.traits.trust * 0.7 + Math.max(0, targetRel.trust) * 0.3
+      const acceptChance = 0.25 + target.traits.trust * 0.6 + Math.max(0, targetRel.trust) * 0.25
 
       if (randomFloat() < acceptChance) {
         agentRel.allied = true

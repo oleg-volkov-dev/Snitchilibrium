@@ -19,7 +19,7 @@ const DEFAULT_TRAITS: AgentTraits = {
 }
 
 // How long before an agent can re-offer alliance to the same person after rejection
-const OFFER_COOLDOWN = 40
+const OFFER_COOLDOWN = 20
 
 // After an alliance lasts this many ticks, betrayal pressure starts building
 const ALLIANCE_PRESSURE_START = 60
@@ -88,7 +88,7 @@ export function decideAction(
     const rel = agent.relations[a.id]
     if (rel?.allied) return false
     if (rel?.lastOfferTick && tick - rel.lastOfferTick < OFFER_COOLDOWN) return false
-    return (rel?.trust ?? 0) > 0.2 || traits.trust > 0.65
+    return (rel?.trust ?? 0) > -0.1 || traits.trust > 0.4
   })
 
   // Betrayal: old alliances get pressure from standoff and time
@@ -118,7 +118,7 @@ export function decideAction(
   const attackUtility = attackCandidates.length > 0
     ? 0.25 + traits.aggression * 0.65 + resentmentBoost + noise()
     : 0
-  const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.5 + noise() : 0
+  const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.7 + 0.15 + noise() : 0
   const betrayUtility = betrayalCandidates.length > 0
     ? (1 - traits.loyalty) * 0.7 + standoffPressure * 0.3 + noise()
     : 0

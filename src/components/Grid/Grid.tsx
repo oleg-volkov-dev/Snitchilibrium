@@ -45,11 +45,11 @@ function drawGrid(
       } else if (cell.type === 'resource') {
         ctx.fillStyle = '#0d1117'
         ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        // Glowing resource dot
+        // Glowing resource dot — size scales with amount
         const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
         const rcx = cx + CELL_SIZE / 2
         const rcy = cy + CELL_SIZE / 2
-        const r = CELL_SIZE * 0.22 * (0.6 + intensity * 0.4)
+        const r = CELL_SIZE * 0.1 + CELL_SIZE * 0.25 * intensity
         const grad = ctx.createRadialGradient(rcx, rcy, 0, rcx, rcy, r * 2)
         grad.addColorStop(0, `rgba(74, 222, 128, ${0.6 + intensity * 0.4})`)
         grad.addColorStop(0.5, `rgba(34, 197, 94, ${0.25 + intensity * 0.3})`)
