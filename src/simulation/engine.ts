@@ -31,6 +31,9 @@ const RESOURCE_SPAWN_RATE = 0.00004
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 120
 
+// An agent wins immediately upon reaching this many resources
+const RESOURCE_WIN_THRESHOLD = 100
+
 export function createSimulation(config: SimulationConfig): SimulationState {
   const grid = createGrid(config.world)
   const agents: AgentState[] = []
@@ -53,6 +56,7 @@ export function createSimulation(config: SimulationConfig): SimulationState {
     winners: [],
     story: [],
     standoffSince: 0,
+    draw: false,
   }
 }
 
@@ -111,14 +115,21 @@ export function stepSimulation(state: SimulationState): SimulationState {
 
   // Check win conditions
   let winners: AgentState[] = []
+  let draw = false
   let newStandoffSince = state.standoffSince
 
-  if (stillAlive.length === 1 && prevAlive.length > 1) {
-    // Solo win
-    winners = [stillAlive[0]]
+  // Resource win: any agent that crossed the threshold this tick
+  const resourceWinners = stillAlive.filter(a => a.resources >= RESOURCE_WIN_THRESHOLD)
+
+  if (resourceWinners.length > 0) {
+    // If multiple crossed the threshold simultaneously, all win together
+    winners = resourceWinners
   } else if (stillAlive.length === 0) {
-    // Everyone died simultaneously — no winner
-    winners = []
+    // Everyone died simultaneously — draw
+    draw = true
+  } else if (stillAlive.length === 1 && prevAlive.length > 1) {
+    // Solo survival win
+    winners = [stillAlive[0]]
   } else if (stillAlive.length >= 2) {
     const allMutuallyAllied = stillAlive.every(a =>
       stillAlive.filter(b => b.id !== a.id).every(b => a.relations[b.id]?.allied)
@@ -136,7 +147,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
     }
   }
 
-  const isOver = winners.length > 0
+  const isOver = winners.length > 0 || draw
   const story = isOver
     ? generateStory(allEvents, newAgents, tick + 1, winners)
     : state.story
@@ -151,6 +162,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
     winners,
     story,
     standoffSince: newStandoffSince,
+    draw,
   }
 }
 
@@ -363,11 +375,22 @@ function generateStory(
 ): string[] {
   const lines: string[] = []
 
-  if (winners.length === 1) {
-    lines.push(`${winners[0].name} was the last agent standing.`)
+  if (winners.length === 0) {
+    lines.push('All agents eliminated each other simultaneously. No winner.')
+  } else if (winners.length === 1) {
+    const w = winners[0]
+    if (w.resources >= RESOURCE_WIN_THRESHOLD) {
+      lines.push(`${w.name} won by accumulating ${w.resources} resources.`)
+    } else {
+      lines.push(`${w.name} was the last agent standing.`)
+    }
   } else {
     const names = winners.map(w => w.name).join(' and ')
-    lines.push(`${names} formed an unbreakable alliance and won together.`)
+    if (winners.every(w => w.resources >= RESOURCE_WIN_THRESHOLD)) {
+      lines.push(`${names} both reached the resource threshold simultaneously.`)
+    } else {
+      lines.push(`${names} formed an unbreakable alliance and won together.`)
+    }
   }
 
   const firstKill = events.find(e => e.action === 'attack' && e.description.includes('defeated'))

@@ -93,4 +93,5 @@ export interface SimulationState {
   winners: AgentState[]      // 1 = solo win, 2+ = alliance win
   story: string[]
   standoffSince: number      // tick when all survivors became allied (0 = no standoff)
+  draw: boolean              // true when all agents die simultaneously
 }
