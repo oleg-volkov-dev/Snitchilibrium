@@ -5,16 +5,23 @@ import styles from './Grid.module.css'
 
 const CELL_SIZE = 26
 
+// Ease in-out cubic so movement accelerates then decelerates
+function ease(t: number): number {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+}
+
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   simulation: SimulationState,
-  selectedAgentId: string | null
+  selectedAgentId: string | null,
+  progress: number
 ) {
   const { grid, agents } = simulation
   const rows = grid.length
   const cols = grid[0]?.length ?? 0
   const W = cols * CELL_SIZE
   const H = rows * CELL_SIZE
+  const t = ease(progress)
 
   ctx.clearRect(0, 0, W, H)
 
@@ -32,7 +39,6 @@ function drawGrid(
       if (cell.type === 'obstacle') {
         ctx.fillStyle = '#1c2333'
         ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        // Subtle cross mark
         ctx.strokeStyle = '#263044'
         ctx.lineWidth = 1
         const pad = CELL_SIZE * 0.3
@@ -45,7 +51,6 @@ function drawGrid(
       } else if (cell.type === 'resource') {
         ctx.fillStyle = '#0d1117'
         ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        // Glowing resource dot — size scales with amount
         const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
         const rcx = cx + CELL_SIZE / 2
         const rcy = cy + CELL_SIZE / 2
@@ -82,7 +87,14 @@ function drawGrid(
     ctx.stroke()
   }
 
-  // Alliance lines
+  // Interpolated agent center helper
+  const agentCenter = (agent: typeof agents[number]) => {
+    const px = agent.prevPosition.x + (agent.position.x - agent.prevPosition.x) * t
+    const py = agent.prevPosition.y + (agent.position.y - agent.prevPosition.y) * t
+    return { cx: px * CELL_SIZE + CELL_SIZE / 2, cy: py * CELL_SIZE + CELL_SIZE / 2 }
+  }
+
+  // Alliance lines (use interpolated positions)
   const drawn = new Set<string>()
   for (const agent of agents) {
     if (!agent.alive) continue
@@ -93,13 +105,15 @@ function drawGrid(
       drawn.add(key)
       const target = agents.find(a => a.id === targetId)
       if (!target?.alive) continue
+      const a = agentCenter(agent)
+      const b = agentCenter(target)
       ctx.save()
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.3)'
       ctx.lineWidth = 1.5
       ctx.setLineDash([4, 4])
       ctx.beginPath()
-      ctx.moveTo(agent.position.x * CELL_SIZE + CELL_SIZE / 2, agent.position.y * CELL_SIZE + CELL_SIZE / 2)
-      ctx.lineTo(target.position.x * CELL_SIZE + CELL_SIZE / 2, target.position.y * CELL_SIZE + CELL_SIZE / 2)
+      ctx.moveTo(a.cx, a.cy)
+      ctx.lineTo(b.cx, b.cy)
       ctx.stroke()
       ctx.restore()
     }
@@ -108,8 +122,7 @@ function drawGrid(
   // Agents
   for (const agent of agents) {
     if (!agent.alive) continue
-    const cx = agent.position.x * CELL_SIZE + CELL_SIZE / 2
-    const cy = agent.position.y * CELL_SIZE + CELL_SIZE / 2
+    const { cx, cy } = agentCenter(agent)
     const radius = CELL_SIZE * 0.36
     const isSelected = agent.id === selectedAgentId
     const healthFraction = agent.health / 100
@@ -173,10 +186,27 @@ export function Grid() {
   const simulation = useSimulationStore(s => s.simulation)
   const selectedAgentId = useSimulationStore(s => s.selectedAgentId)
   const selectAgent = useSimulationStore(s => s.selectAgent)
+  const tickIntervalMs = useSimulationStore(s => s.tickIntervalMs)
 
   const rows = simulation.grid.length
   const cols = simulation.grid[0]?.length ?? 0
 
+  // Refs so the RAF loop always reads the latest values without restarting
+  const simRef = useRef(simulation)
+  const selectedRef = useRef(selectedAgentId)
+  const intervalRef = useRef(tickIntervalMs)
+  const lastTickTimeRef = useRef(performance.now())
+  const rafRef = useRef<number>(0)
+
+  useEffect(() => {
+    simRef.current = simulation
+    lastTickTimeRef.current = performance.now()
+  }, [simulation])
+
+  useEffect(() => { selectedRef.current = selectedAgentId }, [selectedAgentId])
+  useEffect(() => { intervalRef.current = tickIntervalMs }, [tickIntervalMs])
+
+  // Canvas setup + RAF render loop — restarts only when grid dimensions change
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -189,9 +219,18 @@ export function Grid() {
     canvas.style.height = `${logicalH}px`
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.scale(dpr, dpr)
-    drawGrid(ctx, simulation, selectedAgentId)
-  }, [simulation, selectedAgentId, rows, cols])
+
+    const render = () => {
+      const elapsed = performance.now() - lastTickTimeRef.current
+      const progress = Math.min(1, elapsed / Math.max(1, intervalRef.current))
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      drawGrid(ctx, simRef.current, selectedRef.current, progress)
+      rafRef.current = requestAnimationFrame(render)
+    }
+
+    rafRef.current = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [rows, cols])
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current?.getBoundingClientRect()

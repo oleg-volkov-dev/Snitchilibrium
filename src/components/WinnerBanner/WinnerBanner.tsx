@@ -1,7 +1,7 @@
 import { useSimulationStore } from '../../store/simulationStore'
 import styles from './WinnerBanner.module.css'
 
-const STANDOFF_TIMEOUT = 120
+const STANDOFF_TIMEOUT = 60
 const RESOURCE_WIN_THRESHOLD = 100
 
 export function WinnerBanner() {

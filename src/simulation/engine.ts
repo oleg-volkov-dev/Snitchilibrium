@@ -29,7 +29,7 @@ import {
 const RESOURCE_SPAWN_RATE = 0.00002
 
 // If all survivors are allied for this many ticks straight, they win together
-const STANDOFF_TIMEOUT = 120
+const STANDOFF_TIMEOUT = 60
 
 // An agent wins immediately upon reaching this many resources
 const RESOURCE_WIN_THRESHOLD = 100
@@ -166,6 +166,48 @@ export function stepSimulation(state: SimulationState): SimulationState {
   }
 }
 
+// BFS over pairwise allied relations to find all members of an agent's alliance group
+function allianceGroupOf(agentId: string, agentById: Map<string, AgentState>): AgentState[] {
+  const visited = new Set<string>()
+  const queue = [agentId]
+  const group: AgentState[] = []
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    const a = agentById.get(id)
+    if (!a?.alive) continue
+    group.push(a)
+    for (const [targetId, rel] of Object.entries(a.relations)) {
+      if (rel.allied && !visited.has(targetId)) queue.push(targetId)
+    }
+  }
+  return group
+}
+
+function distributeResources(
+  agent: AgentState,
+  amount: number,
+  agentById: Map<string, AgentState>,
+  log: (action: AgentAction['type'], description: string, targetId?: string) => void
+): void {
+  const allies = Array.from(agentById.values()).filter(
+    a => a.alive && a.id !== agent.id && agent.relations[a.id]?.allied
+  )
+  const members = [agent, ...allies]
+  const share = Math.floor(amount / members.length)
+  const remainder = amount - share * members.length
+  agent.resources += share + remainder
+  for (const ally of allies) {
+    ally.resources += share
+  }
+  if (allies.length > 0) {
+    log('gather', `${agent.name} gathered ${amount} resources, shared ${share} each with ${allies.map(a => a.name).join(', ')}`)
+  } else {
+    log('gather', `${agent.name} gathered ${amount} resources`)
+  }
+}
+
 function applyAction(
   agent: AgentState,
   action: AgentAction,
@@ -205,10 +247,9 @@ function applyAction(
         // Auto-collect resource on landing
         if (destCell?.type === 'resource' && (destCell.resourceAmount ?? 0) > 0) {
           const amount = destCell.resourceAmount ?? 0
-          agent.resources += amount
           destCell.type = 'empty'
           delete destCell.resourceAmount
-          log('gather', `${agent.name} picked up ${amount} resources`, undefined)
+          distributeResources(agent, amount, agentById, log)
         }
       }
       break
@@ -219,10 +260,9 @@ function applyAction(
       const cell = cellAt(grid, pos)
       if (cell?.type === 'resource' && (cell.resourceAmount ?? 0) > 0) {
         const amount = cell.resourceAmount ?? 0
-        agent.resources += amount
         cell.type = 'empty'
         delete cell.resourceAmount
-        log('gather', `${agent.name} gathered ${amount} resources`)
+        distributeResources(agent, amount, agentById, log)
       }
       break
     }
@@ -298,13 +338,22 @@ function applyAction(
       const acceptChance = 0.25 + target.traits.trust * 0.6 + Math.max(0, targetRel.trust) * 0.25
 
       if (randomFloat() < acceptChance) {
-        agentRel.allied = true
-        agentRel.allianceTick = tick
-        targetRel.allied = true
-        targetRel.allianceTick = tick
-        modifyTrust(agent, target.id, 0.25)
-        modifyTrust(target, agent.id, 0.25)
-        log('accept-alliance', `${target.name} accepted ${agent.name}'s alliance offer`, target.id)
+        // Find everyone already in the target's alliance group
+        const targetGroup = allianceGroupOf(target.id, agentById)
+        // Connect agent to every member of the group (and vice versa)
+        for (const member of targetGroup) {
+          if (member.id === agent.id) continue
+          const r1 = getOrInitRelation(agent, member.id)
+          r1.allied = true
+          r1.allianceTick = tick
+          const r2 = getOrInitRelation(member, agent.id)
+          r2.allied = true
+          r2.allianceTick = tick
+          modifyTrust(agent, member.id, 0.25)
+          modifyTrust(member, agent.id, 0.25)
+        }
+        const groupNames = targetGroup.filter(m => m.id !== agent.id).map(m => m.name).join(', ')
+        log('accept-alliance', `${target.name} accepted ${agent.name}'s alliance offer${targetGroup.length > 1 ? ` — ${agent.name} joins group: ${groupNames}` : ''}`, target.id)
       } else {
         modifyTrust(agent, target.id, -0.05)
         log('reject-alliance', `${target.name} rejected ${agent.name}'s alliance offer`, target.id)
@@ -317,24 +366,30 @@ function applyAction(
       const target = agentById.get(action.targetId)
       if (!target || !target.alive) break
 
-      getOrInitRelation(agent, target.id).allied = false
-      getOrInitRelation(target, agent.id).allied = false
+      // Break all of the agent's alliances — leaving the entire group
+      const formerGroup = allianceGroupOf(agent.id, agentById).filter(m => m.id !== agent.id)
+      for (const member of formerGroup) {
+        getOrInitRelation(agent, member.id).allied = false
+        getOrInitRelation(member, agent.id).allied = false
+        modifyResentment(member, agent.id, 0.9)
+        modifyTrust(member, agent.id, -0.9)
+      }
 
       const stolen = Math.floor(target.resources * 0.35)
       agent.resources += stolen
       target.resources = Math.max(0, target.resources - stolen)
 
-      modifyResentment(target, agent.id, 0.9)
-      modifyTrust(target, agent.id, -0.9)
-
-      // Reputation damage — others trust the betrayer less
+      // Reputation damage — all other agents trust the betrayer less
       for (const other of agentById.values()) {
-        if (other.id !== agent.id && other.id !== target.id && other.alive) {
+        if (other.id !== agent.id && other.alive) {
           modifyTrust(other, agent.id, -0.15)
         }
       }
 
-      log('betray-ally', `${agent.name} betrayed ${target.name}, stealing ${stolen} resources!`, target.id)
+      const groupDesc = formerGroup.length > 1
+        ? ` (abandoned ${formerGroup.map(m => m.name).join(', ')})`
+        : ''
+      log('betray-ally', `${agent.name} betrayed ${target.name}, stealing ${stolen} resources!${groupDesc}`, target.id)
       break
     }
 
@@ -358,23 +413,39 @@ export function getLeaderboard(agents: AgentState[]): AgentState[] {
     .sort((a, b) => b.resources - a.resources)
 }
 
-export function getActiveAlliances(agents: AgentState[]): Array<{ a: AgentState; b: AgentState; since: number }> {
-  const pairs: Array<{ a: AgentState; b: AgentState; since: number }> = []
-  const seen = new Set<string>()
+export function getAllianceGroups(agents: AgentState[]): Array<{ members: AgentState[]; since: number }> {
+  const visited = new Set<string>()
+  const groups: Array<{ members: AgentState[]; since: number }> = []
+  const agentById = new Map(agents.map(a => [a.id, a]))
+
   for (const agent of agents) {
-    if (!agent.alive) continue
-    for (const [targetId, rel] of Object.entries(agent.relations)) {
-      if (!rel.allied) continue
-      const key = [agent.id, targetId].sort().join('|')
-      if (seen.has(key)) continue
-      seen.add(key)
-      const target = agents.find(a => a.id === targetId)
-      if (target?.alive) {
-        pairs.push({ a: agent, b: target, since: rel.allianceTick })
+    if (!agent.alive || visited.has(agent.id)) continue
+    const hasAlliance = Object.values(agent.relations).some(r => r.allied)
+    if (!hasAlliance) continue
+
+    const members: AgentState[] = []
+    let since = Infinity
+    const queue = [agent.id]
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      if (visited.has(id)) continue
+      visited.add(id)
+      const a = agentById.get(id)
+      if (!a?.alive) continue
+      members.push(a)
+      for (const [targetId, rel] of Object.entries(a.relations)) {
+        if (rel.allied && !visited.has(targetId)) {
+          since = Math.min(since, rel.allianceTick)
+          queue.push(targetId)
+        }
       }
     }
+    if (members.length >= 2) {
+      groups.push({ members, since: since === Infinity ? 0 : since })
+    }
   }
-  return pairs.sort((x, y) => x.since - y.since)
+
+  return groups.sort((a, b) => a.since - b.since)
 }
 
 function generateStory(
