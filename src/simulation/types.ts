@@ -48,6 +48,7 @@ export interface AgentState {
   id: string
   name: string
   position: Position
+  prevPosition: Position
   resources: number
   health: number
   alive: boolean

@@ -186,6 +186,7 @@ function applyAction(
       const key = `${action.targetPos.x},${action.targetPos.y}`
       if (!posMap.has(key) && grid[action.targetPos.y]?.[action.targetPos.x]?.type !== 'obstacle') {
         posMap.delete(`${agent.position.x},${agent.position.y}`)
+        agent.prevPosition = { ...agent.position }
         agent.position = action.targetPos
         posMap.set(key, agent.id)
       }

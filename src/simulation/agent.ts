@@ -35,6 +35,7 @@ export function createAgent(
     id,
     name,
     position,
+    prevPosition: { ...position },
     resources: 0,
     health: 100,
     alive: true,
@@ -156,14 +157,27 @@ function findMoveTarget(
   width: number,
   height: number
 ): Position {
-  // Prefer free adjacent cells; fall back to any walkable cell if boxed in
+  const prev = agent.prevPosition
+  const isPrev = (p: Position) => p.x === prev.x && p.y === prev.y
+
+  // Free cells: not obstacle, not occupied, not where we just came from.
+  // Excluding prevPosition breaks diagonal oscillation: if both agents try to swap
+  // positions, each refuses to step back to where they were last tick.
   const freeAdj = adjacentPositions(agent.position, width, height).filter(
+    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !isPrev(p)
+  )
+  // Fallbacks: allow prev if truly no other option
+  const freeAdjWithPrev = adjacentPositions(agent.position, width, height).filter(
     p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`)
   )
   const walkableAdj = adjacentPositions(agent.position, width, height).filter(
     p => grid[p.y][p.x].type !== 'obstacle'
   )
-  const candidates = freeAdj.length > 0 ? freeAdj : walkableAdj
+
+  const candidates = freeAdj.length > 0 ? freeAdj
+    : freeAdjWithPrev.length > 0 ? freeAdjWithPrev
+    : walkableAdj
+
   if (candidates.length === 0) return agent.position
 
   // 1. Move toward nearest resource
@@ -184,32 +198,18 @@ function findMoveTarget(
     return candidates.sort((a, b) => distance(a, nearestResource!) - distance(b, nearestResource!))[0]
   }
 
-  // 2. No resources anywhere: move toward nearest non-allied enemy.
-  // All agents navigate toward enemies regardless of aggression — the trait only controls
-  // whether they actually attack once adjacent, not whether they approach.
+  // 2. No resources: move toward nearest non-allied enemy
   const enemies = liveOthers.filter(a => !agent.relations[a.id]?.allied)
   if (enemies.length > 0) {
     const nearest = enemies.sort(
       (a, b) => distance(a.position, agent.position) - distance(b.position, agent.position)
     )[0]
-    // Sort by distance to target; break ties by preferring the axis that closes faster
-    // (reduces orbiting where two agents repeatedly step sideways past each other)
-    const dx = nearest.position.x - agent.position.x
-    const dy = nearest.position.y - agent.position.y
-    return candidates.sort((a, b) => {
-      const da = distance(a, nearest.position)
-      const db = distance(b, nearest.position)
-      if (da !== db) return da - db
-      // Tiebreak: prefer candidate that moves along the dominant axis
-      const aAlignX = Math.sign(a.x - agent.position.x) === Math.sign(dx) ? 1 : 0
-      const bAlignX = Math.sign(b.x - agent.position.x) === Math.sign(dx) ? 1 : 0
-      const aAlignY = Math.sign(a.y - agent.position.y) === Math.sign(dy) ? 1 : 0
-      const bAlignY = Math.sign(b.y - agent.position.y) === Math.sign(dy) ? 1 : 0
-      return (bAlignX + bAlignY) - (aAlignX + aAlignY)
-    })[0]
+    return candidates.sort(
+      (a, b) => distance(a, nearest.position) - distance(b, nearest.position)
+    )[0]
   }
 
-  // 3. Only allies left: wander (standoff scenario — betrayal pressure will resolve it)
+  // 3. Standoff: wander among allies
   return shuffle(candidates)[0]
 }
 
