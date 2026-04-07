@@ -25,8 +25,8 @@ import {
   shuffle,
 } from './utils'
 
-// Per-cell per-tick probability. 600 cells × 0.00004 ≈ 1 new resource every 40 ticks.
-const RESOURCE_SPAWN_RATE = 0.00004
+// Per-cell per-tick probability. 600 cells × 0.00002 ≈ 1 new resource every 80 ticks.
+const RESOURCE_SPAWN_RATE = 0.00002
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 120
@@ -237,13 +237,13 @@ function applyAction(
       let attackPower = 10 + randomFloat(0, 10) * (0.5 + agent.traits.aggression * 0.5)
       const defense = target.defending ? 0.5 : 1
 
-      // Alliance combat bonus: each allied agent adjacent to the target adds +25% damage
+      // Alliance combat bonus: each allied agent adjacent to the target adds +50% damage
       const allLive = Array.from(agentById.values()).filter(a => a.alive)
       const supportingAllies = allLive.filter(
         a => a.id !== agent.id && agent.relations[a.id]?.allied && distance(a.position, target.position) <= 1
       )
       if (supportingAllies.length > 0) {
-        attackPower *= 1 + supportingAllies.length * 0.25
+        attackPower *= 1 + supportingAllies.length * 0.5
         log('support-ally', `${supportingAllies.map(a => a.name).join(', ')} supported ${agent.name}'s attack`)
       }
 
@@ -264,9 +264,19 @@ function applyAction(
       }
 
       if (target.health <= 0) {
-        const stolen = Math.floor(target.resources * 0.5)
-        agent.resources += stolen
-        log('attack', `${agent.name} defeated ${target.name}, looting ${stolen} resources`, target.id)
+        const totalLoot = Math.floor(target.resources * 0.5)
+        // Split loot evenly among attacker and all alive allies
+        const allianceMembers = [agent, ...allLive.filter(
+          a => a.id !== agent.id && agent.relations[a.id]?.allied
+        )]
+        const share = Math.floor(totalLoot / allianceMembers.length)
+        for (const member of allianceMembers) {
+          member.resources += share
+        }
+        const allianceDesc = allianceMembers.length > 1
+          ? ` (split ${share} each with ${allianceMembers.slice(1).map(a => a.name).join(', ')})`
+          : ''
+        log('attack', `${agent.name} defeated ${target.name}, looting ${totalLoot} resources${allianceDesc}`, target.id)
       }
       break
     }
