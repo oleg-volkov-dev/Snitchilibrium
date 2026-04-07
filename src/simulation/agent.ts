@@ -134,6 +134,17 @@ export function decideAction(
     ? (1 - agent.health / 100) * (1 - traits.riskTolerance * 0.5) * 0.95 + noise()
     : 0
 
+  // Flee: cowardly (low riskTolerance) or rational (low irrationality) agents retreat when hurt
+  const nearestThreat = nearbyOthers
+    .filter(a => !agent.relations[a.id]?.allied)
+    .sort((a, b) => distance(a.position, agent.position) - distance(b.position, agent.position))[0]
+  const inDanger = !!nearestThreat && distance(nearestThreat.position, agent.position) <= 3 && agent.health < 45
+  const fleeScore = inDanger
+    ? (1 - traits.riskTolerance) * 0.6 + (1 - traits.irrationality) * 0.4
+    : 0
+  // Threshold 0.45 means must be meaningfully cowardly or rational — brave+irrational agents never flee
+  const fleeUtility = fleeScore > 0.45 ? fleeScore + (1 - agent.health / 100) * 0.2 + noise() : 0
+
   // Utility scoring
   // Gather urgency rises as agent approaches the resource win threshold
   const gatherUrgency = Math.min(1, resourceProgress) * 0.6
@@ -153,7 +164,11 @@ export function decideAction(
   // Move urgency also rises when close to winning (keep hunting resources)
   const moveUtility = 0.3 + gatherUrgency * 0.2 + noise()
 
-  const best = Math.max(gatherUtility, attackUtility, allianceUtility, betrayUtility, healUtility, moveUtility)
+  const best = Math.max(gatherUtility, attackUtility, allianceUtility, betrayUtility, healUtility, fleeUtility, moveUtility)
+
+  if (best === fleeUtility && nearestThreat) {
+    return { type: 'move', targetPos: findFleeTarget(agent, nearestThreat.position, grid, occupied, width, height) }
+  }
 
   if (best === gatherUtility && resourceAdj) {
     return { type: 'gather', targetPos: resourceAdj }
@@ -165,7 +180,6 @@ export function decideAction(
   }
 
   if (best === attackUtility && attackCandidates.length > 0) {
-    // Prefer attacking whoever is closest to winning
     const target = attackCandidates.sort((a, b) => b.resources - a.resources)[0]
     return { type: 'attack', targetId: target.id }
   }
@@ -180,6 +194,27 @@ export function decideAction(
 
   const moveTarget = findMoveTarget(agent, grid, liveOthers, occupied, width, height, resourceProgress)
   return { type: 'move', targetPos: moveTarget }
+}
+
+function findFleeTarget(
+  agent: AgentState,
+  threatPos: Position,
+  grid: Cell[][],
+  occupied: Set<string>,
+  width: number,
+  height: number
+): Position {
+  const prev = agent.prevPosition
+  const adj = adjacentPositions(agent.position, width, height)
+  const free = adj.filter(
+    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !(p.x === prev.x && p.y === prev.y)
+  )
+  const candidates = free.length > 0
+    ? free
+    : adj.filter(p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`))
+  if (candidates.length === 0) return agent.position
+  // Move to the cell that maximizes distance from the threat
+  return candidates.sort((a, b) => distance(b, threatPos) - distance(a, threatPos))[0]
 }
 
 function findMoveTarget(

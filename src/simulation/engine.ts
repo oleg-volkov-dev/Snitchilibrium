@@ -25,8 +25,8 @@ import {
   shuffle,
 } from './utils'
 
-// Per-cell per-tick probability. 600 cells × 0.00001 ≈ 1 new resource every 160 ticks.
-const RESOURCE_SPAWN_RATE = 0.00001
+// Per-cell per-tick probability. 600 cells × 0.0000025 ≈ 1 new resource every 640 ticks.
+const RESOURCE_SPAWN_RATE = 0.0000025
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 60
