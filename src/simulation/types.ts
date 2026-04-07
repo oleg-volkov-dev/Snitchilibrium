@@ -12,6 +12,7 @@ export type ActionType =
   | 'gather'
   | 'attack'
   | 'defend'
+  | 'heal'
   | 'offer-alliance'
   | 'accept-alliance'
   | 'reject-alliance'

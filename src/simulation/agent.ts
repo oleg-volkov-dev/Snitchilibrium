@@ -19,7 +19,14 @@ const DEFAULT_TRAITS: AgentTraits = {
 }
 
 // How long before an agent can re-offer alliance to the same person after rejection
-const OFFER_COOLDOWN = 20
+const OFFER_COOLDOWN = 50
+
+// Must match the win threshold in engine.ts
+const RESOURCE_WIN_THRESHOLD = 100
+
+// Cost and gain for the heal action
+const HEAL_COST = 20
+const HEAL_AMOUNT = 30
 
 // After an alliance lasts this many ticks, betrayal pressure starts building
 const ALLIANCE_PRESSURE_START = 60
@@ -83,12 +90,18 @@ export function decideAction(
   // Nearby agents (within 4 tiles)
   const nearbyOthers = liveOthers.filter(a => distance(a.position, agent.position) <= 4)
 
-  // Alliance offers: respect cooldown (only applies after first offer, not to new contacts)
+  // How close this agent is to winning via resources (0-1, can exceed 1 if over threshold)
+  const resourceProgress = agent.resources / RESOURCE_WIN_THRESHOLD
+
+  // Alliance offers: only genuinely trusting agents initiate, and only toward agents they don't distrust
   const potentialAllies = nearbyOthers.filter(a => {
     const rel = agent.relations[a.id]
     if (rel?.allied) return false
     if (rel?.lastOfferTick && tick - rel.lastOfferTick < OFFER_COOLDOWN) return false
-    return (rel?.trust ?? 0) > -0.1 || traits.trust > 0.4
+    // Heavy distrust (e.g. after a betrayal) blocks re-alliancing
+    if ((rel?.trust ?? 0) < -0.2) return false
+    // Only agents with high gullibility (trust trait) initiate alliances
+    return traits.trust > 0.55
   })
 
   // Betrayal: old alliances get pressure from standoff and time
@@ -101,7 +114,7 @@ export function decideAction(
     return totalPressure > 0.55
   })
 
-  // Attack: adjacent non-allied enemies
+  // Attack: adjacent non-allied enemies — priority targets are those close to winning
   const attackCandidates = nearbyOthers.filter(a => {
     if (agent.relations[a.id]?.allied) return false
     return distance(a.position, agent.position) === 1
@@ -110,42 +123,62 @@ export function decideAction(
   // Resentment toward an adjacent attacker raises effective aggression (wounded agents fight back)
   const adjEnemy = attackCandidates[0]
   const resentmentBoost = adjEnemy ? (agent.relations[adjEnemy.id]?.resentment ?? 0) * 0.4 : 0
+  // Seeing a rich nearby enemy raises aggression — stop them from winning
+  const richEnemyThreat = attackCandidates.reduce(
+    (max, a) => Math.max(max, a.resources / RESOURCE_WIN_THRESHOLD), 0
+  )
+
+  // Healing: spend resources to recover health
+  const canHeal = agent.resources >= HEAL_COST && agent.health < 65
+  const healUtility = canHeal
+    ? (1 - agent.health / 100) * (1 - traits.riskTolerance * 0.5) * 0.95 + noise()
+    : 0
 
   // Utility scoring
-  // Attack has a base floor (0.25) so even passive agents fight adjacent enemies.
-  // Aggression and resentment raise it further.
-  const gatherUtility = resourceAdj ? traits.greed + noise() : 0
+  // Gather urgency rises as agent approaches the resource win threshold
+  const gatherUrgency = Math.min(1, resourceProgress) * 0.6
+  const gatherUtility = resourceAdj ? traits.greed + gatherUrgency + noise() : 0
+
   const attackUtility = attackCandidates.length > 0
-    ? 0.25 + traits.aggression * 0.65 + resentmentBoost + noise()
+    ? 0.25 + traits.aggression * 0.65 + resentmentBoost + richEnemyThreat * 0.3 + noise()
     : 0
-  const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.7 + 0.15 + noise() : 0
+
+  // Alliance: purely gullibility-driven, no base bonus — low-trust agents almost never form alliances
+  const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.8 + noise() : 0
+
   const betrayUtility = betrayalCandidates.length > 0
     ? (1 - traits.loyalty) * 0.7 + standoffPressure * 0.3 + noise()
     : 0
-  const moveUtility = 0.35 + noise()
 
-  const best = Math.max(gatherUtility, attackUtility, allianceUtility, betrayUtility, moveUtility)
+  // Move urgency also rises when close to winning (keep hunting resources)
+  const moveUtility = 0.3 + gatherUrgency * 0.2 + noise()
+
+  const best = Math.max(gatherUtility, attackUtility, allianceUtility, betrayUtility, healUtility, moveUtility)
 
   if (best === gatherUtility && resourceAdj) {
     return { type: 'gather', targetPos: resourceAdj }
   }
 
   if (best === betrayUtility && betrayalCandidates.length > 0) {
-    // Betray whoever has the most resources
     const target = betrayalCandidates.sort((a, b) => b.resources - a.resources)[0]
     return { type: 'betray-ally', targetId: target.id }
   }
 
   if (best === attackUtility && attackCandidates.length > 0) {
-    const target = attackCandidates.sort((a, b) => a.health - b.health)[0]
+    // Prefer attacking whoever is closest to winning
+    const target = attackCandidates.sort((a, b) => b.resources - a.resources)[0]
     return { type: 'attack', targetId: target.id }
+  }
+
+  if (best === healUtility && canHeal) {
+    return { type: 'heal' }
   }
 
   if (best === allianceUtility && potentialAllies.length > 0) {
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  const moveTarget = findMoveTarget(agent, grid, liveOthers, occupied, width, height)
+  const moveTarget = findMoveTarget(agent, grid, liveOthers, occupied, width, height, resourceProgress)
   return { type: 'move', targetPos: moveTarget }
 }
 
@@ -155,7 +188,8 @@ function findMoveTarget(
   liveOthers: AgentState[],
   occupied: Set<string>,
   width: number,
-  height: number
+  height: number,
+  resourceProgress = 0
 ): Position {
   const prev = agent.prevPosition
   const isPrev = (p: Position) => p.x === prev.x && p.y === prev.y
@@ -198,14 +232,15 @@ function findMoveTarget(
     return candidates.sort((a, b) => distance(a, nearestResource!) - distance(b, nearestResource!))[0]
   }
 
-  // 2. No resources: move toward nearest non-allied enemy
+  // 2. No resources: if close to winning, hunt the enemy closest to winning (threat priority)
+  //    Otherwise just hunt the nearest enemy
   const enemies = liveOthers.filter(a => !agent.relations[a.id]?.allied)
   if (enemies.length > 0) {
-    const nearest = enemies.sort(
-      (a, b) => distance(a.position, agent.position) - distance(b.position, agent.position)
-    )[0]
+    const target = resourceProgress > 0.5
+      ? enemies.sort((a, b) => b.resources - a.resources)[0]   // I'm close to win: hunt richest threat
+      : enemies.sort((a, b) => distance(a.position, agent.position) - distance(b.position, agent.position))[0]
     return candidates.sort(
-      (a, b) => distance(a, nearest.position) - distance(b, nearest.position)
+      (a, b) => distance(a, target.position) - distance(b, target.position)
     )[0]
   }
 

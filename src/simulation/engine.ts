@@ -25,8 +25,8 @@ import {
   shuffle,
 } from './utils'
 
-// Per-cell per-tick probability. 600 cells × 0.00002 ≈ 1 new resource every 80 ticks.
-const RESOURCE_SPAWN_RATE = 0.00002
+// Per-cell per-tick probability. 600 cells × 0.00001 ≈ 1 new resource every 160 ticks.
+const RESOURCE_SPAWN_RATE = 0.00001
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 60
@@ -326,6 +326,17 @@ function applyAction(
       break
     }
 
+    case 'heal': {
+      const cost = 20
+      const amount = 30
+      if (agent.resources >= cost && agent.health < 100) {
+        agent.resources -= cost
+        agent.health = clamp(agent.health + amount, 0, 100)
+        log('heal', `${agent.name} spent ${cost} resources to heal ${amount} HP`)
+      }
+      break
+    }
+
     case 'offer-alliance': {
       if (!action.targetId) break
       const target = agentById.get(action.targetId)
@@ -335,7 +346,8 @@ function applyAction(
       agentRel.lastOfferTick = tick
 
       const targetRel = getOrInitRelation(target, agent.id)
-      const acceptChance = 0.25 + target.traits.trust * 0.6 + Math.max(0, targetRel.trust) * 0.25
+      // Acceptance is purely gullibility-driven — low-trust agents almost always refuse
+      const acceptChance = target.traits.trust * 0.85 + Math.max(0, targetRel.trust) * 0.2
 
       if (randomFloat() < acceptChance) {
         // Find everyone already in the target's alliance group
