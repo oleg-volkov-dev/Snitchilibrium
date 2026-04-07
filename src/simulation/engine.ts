@@ -64,7 +64,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   const { agents, grid, tick } = state
 
   // Don't step if already over
-  if (state.winners.length > 0) return state
+  if (state.winners.length > 0 || state.draw) return state
 
   const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
   const newAgents = agents.map(a => ({
@@ -72,7 +72,6 @@ export function stepSimulation(state: SimulationState): SimulationState {
     relations: Object.fromEntries(
       Object.entries(a.relations).map(([k, v]) => [k, { ...v }])
     ),
-    defending: false,
   }))
   const newEvents: EventLogEntry[] = []
 
@@ -95,6 +94,28 @@ export function stepSimulation(state: SimulationState): SimulationState {
     updateRelations(agent)
     const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure)
     applyAction(agent, action, agentById, newGrid, posMap, tick, newEvents)
+
+    // Memory scan: update agent's last known resource position after acting
+    if (agent.alive) {
+      const scanRadius = Math.max(2, Math.round(agent.traits.memory * 12))
+      let bestDist = Infinity
+      for (let dy = -scanRadius; dy <= scanRadius; dy++) {
+        for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+          const nx = agent.position.x + dx
+          const ny = agent.position.y + dy
+          if (newGrid[ny]?.[nx]?.type === 'resource') {
+            const d = Math.abs(dx) + Math.abs(dy)
+            if (d < bestDist) { bestDist = d; agent.lastKnownResourcePos = { x: nx, y: ny } }
+          }
+        }
+      }
+      // Forget if standing on the remembered spot and it's gone
+      const mem = agent.lastKnownResourcePos
+      if (mem && agent.position.x === mem.x && agent.position.y === mem.y
+          && newGrid[mem.y]?.[mem.x]?.type !== 'resource') {
+        agent.lastKnownResourcePos = undefined
+      }
+    }
   }
 
   const maxResources = Math.max(8, state.config.world.agentCount * 2)
@@ -321,11 +342,6 @@ function applyAction(
       break
     }
 
-    case 'defend': {
-      agent.defending = true
-      break
-    }
-
     case 'heal': {
       const cost = 20
       const amount = 30
@@ -405,12 +421,27 @@ function applyAction(
       break
     }
 
+    case 'share': {
+      if (!action.targetId) break
+      const target = agentById.get(action.targetId)
+      if (!target || !target.alive) break
+      const amount = Math.min(Math.floor(agent.resources * 0.3), 35)
+      if (amount <= 0) break
+      agent.resources -= amount
+      target.resources += amount
+      modifyTrust(target, agent.id, 0.25)
+      modifyTrust(agent, target.id, 0.1)
+      log('share', `${agent.name} shared ${amount} resources with ${target.name}`, target.id)
+      break
+    }
+
     case 'support-ally': {
       if (!action.targetId) break
       const target = agentById.get(action.targetId)
       if (!target || !target.alive) break
-      modifyTrust(agent, target.id, 0.1)
-      modifyTrust(target, agent.id, 0.1)
+      modifyTrust(agent, target.id, 0.08)
+      modifyTrust(target, agent.id, 0.08)
+      log('support-ally', `${agent.name} is standing by ${target.name}`, target.id)
       break
     }
 

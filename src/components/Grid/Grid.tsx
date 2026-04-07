@@ -168,16 +168,6 @@ function drawGrid(
     ctx.textBaseline = 'middle'
     ctx.fillText(agent.name[0], cx, cy + 0.5)
 
-    // Defending tint
-    if (agent.defending) {
-      ctx.save()
-      ctx.globalAlpha = 0.45
-      ctx.beginPath()
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-      ctx.fillStyle = '#818cf8'
-      ctx.fill()
-      ctx.restore()
-    }
   }
 }
 

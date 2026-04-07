@@ -11,8 +11,8 @@ export type ActionType =
   | 'move'
   | 'gather'
   | 'attack'
-  | 'defend'
   | 'heal'
+  | 'share'
   | 'offer-alliance'
   | 'accept-alliance'
   | 'reject-alliance'
@@ -55,8 +55,8 @@ export interface AgentState {
   alive: boolean
   traits: AgentTraits
   relations: Record<string, RelationEntry>
-  defending: boolean
   color: string
+  lastKnownResourcePos?: Position  // memory: last spotted resource location
 }
 
 export interface WorldConfig {

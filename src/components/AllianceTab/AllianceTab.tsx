@@ -47,11 +47,19 @@ export function AllianceTab() {
       <div className={styles.legend}>
         <div className={styles.legendItem}>
           <span className={styles.legendDot} style={{ background: '#fbbf24' }} />
-          Ally attack deals +50% damage per supporter
+          +50% damage per adjacent ally in a fight
+        </div>
+        <div className={styles.legendItem}>
+          <span className={styles.legendDot} style={{ background: '#4ade80' }} />
+          Gathered resources split evenly among group
+        </div>
+        <div className={styles.legendItem}>
+          <span className={styles.legendDot} style={{ background: '#60a5fa' }} />
+          Loyal agents share resources with poorer allies
         </div>
         <div className={styles.legendItem}>
           <span className={styles.legendDot} style={{ background: '#ef4444' }} />
-          Betrayal breaks all group bonds and steals 35% resources
+          Betrayal breaks all group bonds, steals 35%
         </div>
       </div>
     </div>
