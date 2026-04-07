@@ -42,9 +42,10 @@
   min-width: 90px;
 }
 
-.slider {
-  flex: 1;
-  accent-color: #6366f1;
+.btnActive {
+  background: #4f46e5;
+  border-color: #6366f1;
+  color: #fff;
 }
 
 .tick {

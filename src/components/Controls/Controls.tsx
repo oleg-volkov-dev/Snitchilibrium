@@ -23,15 +23,16 @@ export function Controls() {
     }
   }, [running, tickIntervalMs, stepFn])
 
-  const speedLabel = tickIntervalMs <= 100 ? 'Fast' : tickIntervalMs <= 300 ? 'Normal' : 'Slow'
+  const speeds = [
+    { label: 'Slow', ms: 600 },
+    { label: 'Normal', ms: 300 },
+    { label: 'Fast', ms: 80 },
+  ]
 
   return (
     <div className={styles.controls}>
       <div className={styles.row}>
-        <button
-          className={styles.btn}
-          onClick={running ? pause : start}
-        >
+        <button className={styles.btn} onClick={running ? pause : start}>
           {running ? 'Pause' : 'Start'}
         </button>
         <button className={styles.btn} onClick={step} disabled={running}>
@@ -45,16 +46,16 @@ export function Controls() {
         </button>
       </div>
       <div className={styles.row}>
-        <label className={styles.label}>Speed: {speedLabel}</label>
-        <input
-          type="range"
-          min={50}
-          max={1000}
-          step={50}
-          value={tickIntervalMs}
-          onChange={e => setSpeed(Number(e.target.value))}
-          className={styles.slider}
-        />
+        <span className={styles.label}>Speed</span>
+        {speeds.map(s => (
+          <button
+            key={s.label}
+            className={`${styles.btn} ${tickIntervalMs === s.ms ? styles.btnActive : ''}`}
+            onClick={() => setSpeed(s.ms)}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
       <div className={styles.tick}>Tick: {simulation.tick}</div>
     </div>

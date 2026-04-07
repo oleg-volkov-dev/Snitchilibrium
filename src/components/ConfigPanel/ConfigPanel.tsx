@@ -58,28 +58,32 @@ export function ConfigPanel() {
             />
           </div>
           <div className={styles.field}>
-            <label>Resource Density</label>
-            <input
-              type="range"
-              min={0}
-              max={0.3}
-              step={0.01}
-              value={local.world.resourceDensity}
-              onChange={e => updateWorld('resourceDensity', Number(e.target.value))}
-            />
-            <span>{(local.world.resourceDensity * 100).toFixed(0)}%</span>
+            <label>Resources</label>
+            <div className={styles.btnGroup}>
+              {([['None', 0], ['Sparse', 0.005], ['Normal', 0.02], ['Rich', 0.05]] as const).map(([label, val]) => (
+                <button
+                  key={label}
+                  className={`${styles.option} ${local.world.resourceDensity === val ? styles.optionActive : ''}`}
+                  onClick={() => updateWorld('resourceDensity', val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className={styles.field}>
-            <label>Obstacle Density</label>
-            <input
-              type="range"
-              min={0}
-              max={0.25}
-              step={0.01}
-              value={local.world.obstacleDensity}
-              onChange={e => updateWorld('obstacleDensity', Number(e.target.value))}
-            />
-            <span>{(local.world.obstacleDensity * 100).toFixed(0)}%</span>
+            <label>Obstacles</label>
+            <div className={styles.btnGroup}>
+              {([['None', 0], ['Few', 0.05], ['Normal', 0.12], ['Dense', 0.22]] as const).map(([label, val]) => (
+                <button
+                  key={label}
+                  className={`${styles.option} ${local.world.obstacleDensity === val ? styles.optionActive : ''}`}
+                  onClick={() => updateWorld('obstacleDensity', val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <button className={styles.apply} onClick={handleApply}>
             Apply and Reset
