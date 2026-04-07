@@ -38,7 +38,19 @@
 .field label {
   font-size: 12px;
   color: #9ca3af;
-  min-width: 130px;
+  min-width: 100px;
+}
+
+/* For rows where buttons would overflow, stack label above buttons */
+.fieldColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fieldColumn label {
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .field input[type='number'] {

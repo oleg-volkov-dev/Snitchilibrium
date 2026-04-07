@@ -57,7 +57,7 @@ export function ConfigPanel() {
               onChange={e => updateWorld('agentCount', Number(e.target.value))}
             />
           </div>
-          <div className={styles.field}>
+          <div className={styles.fieldColumn}>
             <label>Resources</label>
             <div className={styles.btnGroup}>
               {([['None', 0], ['Sparse', 0.005], ['Normal', 0.02], ['Rich', 0.05]] as const).map(([label, val]) => (
@@ -71,7 +71,7 @@ export function ConfigPanel() {
               ))}
             </div>
           </div>
-          <div className={styles.field}>
+          <div className={styles.fieldColumn}>
             <label>Obstacles</label>
             <div className={styles.btnGroup}>
               {([['None', 0], ['Few', 0.05], ['Normal', 0.12], ['Dense', 0.22]] as const).map(([label, val]) => (

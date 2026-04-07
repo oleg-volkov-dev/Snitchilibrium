@@ -15,6 +15,12 @@
   flex-wrap: wrap;
 }
 
+.speedRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .btn {
   padding: 5px 10px;
   background: #374151;
@@ -39,7 +45,7 @@
 .label {
   font-size: 12px;
   color: #9ca3af;
-  min-width: 90px;
+  white-space: nowrap;
 }
 
 .btnActive {

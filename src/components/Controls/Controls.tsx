@@ -45,7 +45,7 @@ export function Controls() {
           Randomize
         </button>
       </div>
-      <div className={styles.row}>
+      <div className={styles.speedRow}>
         <span className={styles.label}>Speed</span>
         {speeds.map(s => (
           <button
