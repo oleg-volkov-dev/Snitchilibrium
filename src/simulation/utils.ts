@@ -1,7 +1,7 @@
 import { Position } from './types'
 
 // Death zone constants — exported so engine and renderer share the same math
-export const DEATH_ZONE_START = 3000       // tick when zone begins shrinking
+export const DEATH_ZONE_START = 1500       // tick when zone begins shrinking
 export const DEATH_ZONE_DURATION = 2500    // ticks until zone fully closed
 export const DEATH_ZONE_DAMAGE = 3         // HP lost per tick while outside
 

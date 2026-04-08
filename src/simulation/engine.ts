@@ -180,9 +180,11 @@ export function stepSimulation(state: SimulationState): SimulationState {
     // Solo survival win
     winners = [stillAlive[0]]
   } else if (stillAlive.length >= 2) {
-    const allMutuallyAllied = stillAlive.every(a =>
-      stillAlive.filter(b => b.id !== a.id).every(b => a.relations[b.id]?.allied)
-    )
+    // Use BFS connected components: all survivors are in one alliance group if
+    // every agent is reachable from the first via pairwise allied links.
+    const agentByIdForStandoff = new Map(stillAlive.map(a => [a.id, a]))
+    const allianceGroup = allianceGroupOf(stillAlive[0].id, agentByIdForStandoff)
+    const allMutuallyAllied = allianceGroup.length === stillAlive.length
 
     if (allMutuallyAllied) {
       if (state.standoffSince === 0) {
