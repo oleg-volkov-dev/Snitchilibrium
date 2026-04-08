@@ -1,4 +1,5 @@
 import { useSimulationStore } from '../../store/simulationStore'
+import { AGENT_PRESETS } from '../../simulation/presets'
 import styles from './AgentPanel.module.css'
 
 function TraitBar({ label, value }: { label: string; value: number }) {
@@ -26,6 +27,8 @@ export function AgentPanel() {
     )
   }
 
+  const preset = AGENT_PRESETS.find(p => p.name === agent.name)
+
   const allies = Object.entries(agent.relations)
     .filter(([, rel]) => rel.allied)
     .map(([id]) => agents.find(a => a.id === id))
@@ -45,6 +48,7 @@ export function AgentPanel() {
         <span className={styles.name}>{agent.name}</span>
         {!agent.alive && <span className={styles.dead}>eliminated</span>}
       </div>
+      {preset && <div className={styles.archetype}>{preset.description}</div>}
 
       <div className={styles.stats}>
         <div className={styles.stat}>

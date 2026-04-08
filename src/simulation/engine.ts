@@ -16,6 +16,7 @@ import {
   updateRelations,
 } from './agent'
 import { cellAt, createGrid, findEmptyPositions, spawnResources } from './world'
+import { AGENT_PRESETS } from './presets'
 import {
   agentColor,
   clamp,
@@ -41,11 +42,18 @@ export function createSimulation(config: SimulationConfig): SimulationState {
   const agents: AgentState[] = []
   const positions = shuffle(findEmptyPositions(grid, []))
 
-  for (let i = 0; i < config.world.agentCount; i++) {
-    const pos = positions[i] ?? { x: 0, y: 0 }
-    const traits = randomizeTraits(config.world.defaultTraits)
-    const agent = createAgent(`agent-${i}`, generateAgentName(i), pos, agentColor(i), traits)
-    agents.push(agent)
+  if (config.usePresetAgents) {
+    for (let i = 0; i < AGENT_PRESETS.length; i++) {
+      const preset = AGENT_PRESETS[i]
+      const pos = positions[i] ?? { x: 0, y: 0 }
+      agents.push(createAgent(`agent-${i}`, preset.name, pos, agentColor(i), preset.traits))
+    }
+  } else {
+    for (let i = 0; i < config.world.agentCount; i++) {
+      const pos = positions[i] ?? { x: 0, y: 0 }
+      const traits = randomizeTraits(config.world.defaultTraits)
+      agents.push(createAgent(`agent-${i}`, generateAgentName(i), pos, agentColor(i), traits))
+    }
   }
 
   return {

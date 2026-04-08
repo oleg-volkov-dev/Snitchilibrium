@@ -13,6 +13,7 @@ const DEFAULT_CONFIG: SimulationConfig = {
   },
   tickIntervalMs: 300,
   maxTicks: 5000,
+  usePresetAgents: true,
 }
 
 interface SimulationStore {

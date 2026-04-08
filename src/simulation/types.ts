@@ -73,6 +73,7 @@ export interface SimulationConfig {
   world: WorldConfig
   tickIntervalMs: number
   maxTicks: number
+  usePresetAgents: boolean  // true = spawn the 12 named archetypes; false = random traits
 }
 
 export interface EventLogEntry {

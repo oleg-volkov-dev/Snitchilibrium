@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSimulationStore } from '../../store/simulationStore'
 import { SimulationConfig } from '../../simulation/types'
+import { AGENT_PRESETS } from '../../simulation/presets'
 import styles from './ConfigPanel.module.css'
 
 export function ConfigPanel() {
@@ -20,6 +21,10 @@ export function ConfigPanel() {
     setLocal(c => ({ ...c, world: { ...c.world, [key]: value } }))
   }
 
+  function setMode(usePreset: boolean) {
+    setLocal(c => ({ ...c, usePresetAgents: usePreset }))
+  }
+
   return (
     <div className={styles.wrapper}>
       <button className={styles.toggle} onClick={() => setOpen(o => !o)}>
@@ -27,6 +32,40 @@ export function ConfigPanel() {
       </button>
       {open && (
         <div className={styles.panel}>
+
+          {/* Agent mode */}
+          <div className={styles.fieldColumn}>
+            <label>Agents</label>
+            <div className={styles.btnGroup}>
+              <button
+                className={`${styles.option} ${local.usePresetAgents ? styles.optionActive : ''}`}
+                onClick={() => setMode(true)}
+              >
+                Preset ({AGENT_PRESETS.length})
+              </button>
+              <button
+                className={`${styles.option} ${!local.usePresetAgents ? styles.optionActive : ''}`}
+                onClick={() => setMode(false)}
+              >
+                Random
+              </button>
+            </div>
+          </div>
+
+          {/* Agent count — only relevant in random mode */}
+          {!local.usePresetAgents && (
+            <div className={styles.field}>
+              <label>Count</label>
+              <input
+                type="number"
+                min={2}
+                max={20}
+                value={local.world.agentCount}
+                onChange={e => updateWorld('agentCount', Number(e.target.value))}
+              />
+            </div>
+          )}
+
           <div className={styles.field}>
             <label>Grid Width</label>
             <input
@@ -47,16 +86,7 @@ export function ConfigPanel() {
               onChange={e => updateWorld('height', Number(e.target.value))}
             />
           </div>
-          <div className={styles.field}>
-            <label>Agents</label>
-            <input
-              type="number"
-              min={2}
-              max={20}
-              value={local.world.agentCount}
-              onChange={e => updateWorld('agentCount', Number(e.target.value))}
-            />
-          </div>
+
           <div className={styles.fieldColumn}>
             <label>Resources</label>
             <div className={styles.btnGroup}>
@@ -85,6 +115,7 @@ export function ConfigPanel() {
               ))}
             </div>
           </div>
+
           <button className={styles.apply} onClick={handleApply}>
             Apply and Reset
           </button>
