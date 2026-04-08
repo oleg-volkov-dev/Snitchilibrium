@@ -1,14 +1,16 @@
 .panel {
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 6px;
+  background: #1a2235;
+  border: 1px solid #2a3550;
+  border-radius: 8px;
   padding: 12px;
-  min-width: 200px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .empty {
   font-size: 12px;
-  color: #4b5563;
+  color: #475569;
+  text-align: center;
+  padding: 8px 0;
 }
 
 .header {
@@ -19,91 +21,109 @@
 }
 
 .dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .name {
-  font-size: 15px;
+  flex: 1;
+  font-size: 14px;
   font-weight: 600;
-  color: #f9fafb;
+  color: #f1f5f9;
 }
 
 .dead {
-  font-size: 11px;
+  font-size: 10px;
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
-  padding: 1px 6px;
-  border-radius: 3px;
+  background: rgba(239, 68, 68, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .stats {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 0;
+  margin-bottom: 10px;
+  background: #111927;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #2a3550;
 }
 
 .stat {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 6px 8px;
+  border-right: 1px solid #2a3550;
+}
+
+.stat:last-child {
+  border-right: none;
 }
 
 .statLabel {
-  font-size: 10px;
-  color: #6b7280;
+  font-size: 9px;
+  color: #475569;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
 }
 
 .statValue {
   font-size: 14px;
-  color: #e5e7eb;
+  color: #e2e8f0;
   font-weight: 600;
 }
 
 .section {
-  font-size: 11px;
-  color: #6b7280;
+  font-size: 10px;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 10px 0 6px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  margin: 10px 0 5px;
 }
 
 .traitRow {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .traitLabel {
   font-size: 11px;
-  color: #9ca3af;
-  width: 80px;
+  color: #7a8fad;
+  width: 76px;
   flex-shrink: 0;
 }
 
 .traitBar {
   flex: 1;
-  height: 5px;
-  background: #374151;
-  border-radius: 3px;
+  height: 4px;
+  background: #1e2d45;
+  border-radius: 2px;
   overflow: hidden;
 }
 
 .traitFill {
   height: 100%;
-  background: #6366f1;
-  border-radius: 3px;
+  background: #5b5bd6;
+  border-radius: 2px;
+  transition: width 0.2s;
 }
 
 .traitValue {
-  font-size: 11px;
-  color: #6b7280;
-  width: 24px;
+  font-size: 10px;
+  color: #475569;
+  width: 22px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .tagList {
@@ -116,14 +136,14 @@
   font-size: 11px;
   color: #fbbf24;
   border: 1px solid;
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
 }
 
 .enemyTag {
   font-size: 11px;
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  padding: 1px 6px;
-  border-radius: 3px;
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  padding: 1px 7px;
+  border-radius: 4px;
 }

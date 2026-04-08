@@ -1,16 +1,17 @@
 .panel {
-  width: 280px;
+  width: 272px;
   flex-shrink: 0;
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 6px;
+  background: #1a2235;
+  border: 1px solid #2a3550;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .tabs {
   display: flex;
-  border-bottom: 1px solid #374151;
+  border-bottom: 1px solid #2a3550;
   flex-shrink: 0;
 }
 
@@ -19,37 +20,39 @@
   padding: 9px 12px;
   background: none;
   border: none;
-  color: #6b7280;
+  color: #475569;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: color 0.1s;
+  transition: color 0.15s;
 }
 
 .tab:hover {
-  color: #d1d5db;
+  color: #94a3b8;
 }
 
 .active {
-  color: #f9fafb;
+  color: #e2e8f0;
   border-bottom: 2px solid #6366f1;
   margin-bottom: -1px;
 }
 
 .badge {
-  background: #6366f1;
+  background: #4338ca;
   color: #fff;
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 8px;
   line-height: 1.4;
+  font-weight: 600;
 }
 
 .content {
-  padding: 12px;
+  padding: 10px;
   overflow-y: auto;
   flex: 1;
 }

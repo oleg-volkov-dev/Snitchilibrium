@@ -47,15 +47,17 @@ export function Controls() {
       </div>
       <div className={styles.speedRow}>
         <span className={styles.label}>Speed</span>
-        {speeds.map(s => (
-          <button
-            key={s.label}
-            className={`${styles.btn} ${tickIntervalMs === s.ms ? styles.btnActive : ''}`}
-            onClick={() => setSpeed(s.ms)}
-          >
-            {s.label}
-          </button>
-        ))}
+        <div className={styles.speedBtns}>
+          {speeds.map(s => (
+            <button
+              key={s.label}
+              className={`${styles.btn} ${tickIntervalMs === s.ms ? styles.btnActive : ''}`}
+              onClick={() => setSpeed(s.ms)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className={styles.tick}>Tick: {simulation.tick}</div>
     </div>
