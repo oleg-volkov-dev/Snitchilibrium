@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Cell, SimulationState } from '../../simulation/types'
+import { getVisionRadius } from '../../simulation/agent'
+import { getSafeRadius, DEATH_ZONE_START } from '../../simulation/utils'
 import { useSimulationStore } from '../../store/simulationStore'
 import styles from './Grid.module.css'
 
@@ -119,6 +121,50 @@ function drawGrid(
     }
   }
 
+  // Vision radius overlay for selected agent + their allies (shared vision)
+  const selectedAgent = selectedAgentId ? agents.find(a => a.id === selectedAgentId && a.alive) : null
+  if (selectedAgent) {
+    const drawVisionCircle = (
+      vAgent: typeof agents[number],
+      isOwn: boolean
+    ) => {
+      const { cx, cy } = agentCenter(vAgent)
+      const vrPx = getVisionRadius(vAgent.traits.memory) * CELL_SIZE
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, vrPx)
+      if (isOwn) {
+        grad.addColorStop(0, 'rgba(99, 102, 241, 0.06)')
+        grad.addColorStop(0.75, 'rgba(99, 102, 241, 0.08)')
+      } else {
+        // Allied vision: amber tint to visually distinguish
+        grad.addColorStop(0, 'rgba(251, 191, 36, 0.03)')
+        grad.addColorStop(0.75, 'rgba(251, 191, 36, 0.05)')
+      }
+      grad.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = grad
+      ctx.beginPath()
+      ctx.arc(cx, cy, vrPx, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(cx, cy, vrPx, 0, Math.PI * 2)
+      ctx.strokeStyle = isOwn ? 'rgba(99, 102, 241, 0.4)' : 'rgba(251, 191, 36, 0.25)'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // Draw ally circles first (behind), then own circle on top
+    for (const a of agents) {
+      if (a.alive && a.id !== selectedAgent.id && selectedAgent.relations[a.id]?.allied) {
+        drawVisionCircle(a, false)
+      }
+    }
+    drawVisionCircle(selectedAgent, true)
+  }
+
   // Agents
   for (const agent of agents) {
     if (!agent.alive) continue
@@ -168,6 +214,60 @@ function drawGrid(
     ctx.textBaseline = 'middle'
     ctx.fillText(agent.name[0], cx, cy + 0.5)
 
+  }
+
+  // Death zone overlay — drawn last so it tints everything outside the safe circle
+  const { tick } = simulation
+  const safeRadius = getSafeRadius(tick, cols, rows)
+  if (safeRadius !== Infinity) {
+    const mapCx = (cols / 2) * CELL_SIZE
+    const mapCy = (rows / 2) * CELL_SIZE
+    const safeRadiusPx = safeRadius * CELL_SIZE
+    // Pulsing opacity on the border (uses real time so it animates even when paused)
+    const pulse = 0.55 + 0.25 * Math.sin(performance.now() / 400)
+
+    // Dark red fill outside the safe circle using even-odd winding rule
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, W, H)
+    ctx.arc(mapCx, mapCy, Math.max(0, safeRadiusPx), 0, Math.PI * 2, true)
+    ctx.fillStyle = 'rgba(180, 20, 20, 0.28)'
+    ctx.fill('evenodd')
+    ctx.restore()
+
+    // Inner edge glow gradient
+    if (safeRadiusPx > 0) {
+      const edgeGrad = ctx.createRadialGradient(mapCx, mapCy, Math.max(0, safeRadiusPx - CELL_SIZE * 1.5), mapCx, mapCy, safeRadiusPx + CELL_SIZE * 0.5)
+      edgeGrad.addColorStop(0, 'rgba(239, 68, 68, 0)')
+      edgeGrad.addColorStop(0.6, `rgba(239, 68, 68, ${pulse * 0.35})`)
+      edgeGrad.addColorStop(1, `rgba(239, 68, 68, ${pulse * 0.6})`)
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, 0, W, H)
+      ctx.arc(mapCx, mapCy, Math.max(0, safeRadiusPx - CELL_SIZE * 1.5), 0, Math.PI * 2, true)
+      ctx.fillStyle = edgeGrad
+      ctx.fill('evenodd')
+      ctx.restore()
+
+      // Sharp border ring
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(mapCx, mapCy, safeRadiusPx, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.restore()
+    }
+  }
+
+  // Approaching warning: subtle vignette when zone is 300 ticks away
+  if (tick >= DEATH_ZONE_START - 300 && safeRadius === Infinity) {
+    const warnProgress = (tick - (DEATH_ZONE_START - 300)) / 300
+    const vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75)
+    vign.addColorStop(0, 'rgba(180,20,20,0)')
+    vign.addColorStop(1, `rgba(180,20,20,${warnProgress * 0.18})`)
+    ctx.fillStyle = vign
+    ctx.fillRect(0, 0, W, H)
   }
 }
 

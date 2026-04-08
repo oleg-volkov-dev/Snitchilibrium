@@ -23,10 +23,12 @@ import {
   generateAgentName,
   randomFloat,
   shuffle,
+  getSafeRadius,
+  DEATH_ZONE_DAMAGE,
 } from './utils'
 
-// Per-cell per-tick probability. 600 cells × 0.0000025 ≈ 1 new resource every 640 ticks.
-const RESOURCE_SPAWN_RATE = 0.0000025
+// Per-cell per-tick probability. 600 cells × 0.000018 ≈ 1 new resource every ~93 ticks.
+const RESOURCE_SPAWN_RATE = 0.000018
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 60
@@ -120,6 +122,32 @@ export function stepSimulation(state: SimulationState): SimulationState {
 
   const maxResources = Math.max(8, state.config.world.agentCount * 2)
   spawnResources(newGrid, RESOURCE_SPAWN_RATE, maxResources)
+
+  // Death zone: shrinking circle that damages agents outside the safe radius
+  const dzCols = newGrid[0].length
+  const dzRows = newGrid.length
+  const safeRadius = getSafeRadius(tick, dzCols, dzRows)
+  if (safeRadius !== Infinity) {
+    const cx = (dzCols - 1) / 2
+    const cy = (dzRows - 1) / 2
+    for (const agent of newAgents.filter(a => a.alive)) {
+      const dx = agent.position.x - cx
+      const dy = agent.position.y - cy
+      if (Math.sqrt(dx * dx + dy * dy) > safeRadius) {
+        agent.health -= DEATH_ZONE_DAMAGE
+        if (newEvents[newEvents.length - 1]?.agentId !== agent.id ||
+            newEvents[newEvents.length - 1]?.action !== 'idle') {
+          newEvents.push({
+            tick: tick + 1,
+            agentId: agent.id,
+            agentName: agent.name,
+            action: 'idle',
+            description: `${agent.name} is burning in the death zone!`,
+          })
+        }
+      }
+    }
+  }
 
   for (const a of newAgents) {
     if (a.health <= 0) {
@@ -262,6 +290,8 @@ function applyAction(
       const destCell = grid[action.targetPos.y]?.[action.targetPos.x]
       if (!posMap.has(key) && destCell?.type !== 'obstacle') {
         posMap.delete(`${agent.position.x},${agent.position.y}`)
+        // Keep up to 3 recent positions to detect oscillation cycles
+        agent.positionHistory = [{ ...agent.position }, ...agent.positionHistory].slice(0, 3)
         agent.prevPosition = { ...agent.position }
         agent.position = action.targetPos
         posMap.set(key, agent.id)
@@ -296,7 +326,7 @@ function applyAction(
 
       // Base damage
       let attackPower = 10 + randomFloat(0, 10) * (0.5 + agent.traits.aggression * 0.5)
-      const defense = target.defending ? 0.5 : 1
+      const defense = 1
 
       // Alliance combat bonus: each allied agent adjacent to the target adds +50% damage
       const allLive = Array.from(agentById.values()).filter(a => a.alive)

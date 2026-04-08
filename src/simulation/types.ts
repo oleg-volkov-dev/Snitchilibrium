@@ -50,6 +50,7 @@ export interface AgentState {
   name: string
   position: Position
   prevPosition: Position
+  positionHistory: Position[]      // last 3 positions for anti-oscillation
   resources: number
   health: number
   alive: boolean

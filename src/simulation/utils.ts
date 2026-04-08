@@ -1,5 +1,19 @@
 import { Position } from './types'
 
+// Death zone constants — exported so engine and renderer share the same math
+export const DEATH_ZONE_START = 3000       // tick when zone begins shrinking
+export const DEATH_ZONE_DURATION = 2500    // ticks until zone fully closed
+export const DEATH_ZONE_DAMAGE = 3         // HP lost per tick while outside
+
+/** Safe-zone radius in grid tiles. Returns Infinity before zone activates. */
+export function getSafeRadius(tick: number, cols: number, rows: number): number {
+  if (tick < DEATH_ZONE_START) return Infinity
+  // Start radius covers the full map diagonal so nothing is damaged initially
+  const maxRadius = Math.sqrt(cols * cols + rows * rows) / 2 + 1
+  const progress = Math.min(1, (tick - DEATH_ZONE_START) / DEATH_ZONE_DURATION)
+  return maxRadius * (1 - progress)
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }

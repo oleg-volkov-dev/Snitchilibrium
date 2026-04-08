@@ -21,8 +21,12 @@ const DEFAULT_TRAITS: AgentTraits = {
 const OFFER_COOLDOWN = 50
 const RESOURCE_WIN_THRESHOLD = 100
 const HEAL_COST = 20
-const HEAL_AMOUNT = 30
-const ALLIANCE_PRESSURE_START = 60
+
+
+// Vision radius in grid tiles — used in both agent decision-making and grid rendering
+export function getVisionRadius(memory: number): number {
+  return Math.round(3 + memory * 9)  // range [3, 12]
+}
 
 export function createAgent(
   id: string,
@@ -36,6 +40,7 @@ export function createAgent(
     name,
     position,
     prevPosition: { ...position },
+    positionHistory: [],
     resources: 0,
     health: 100,
     alive: true,
@@ -87,8 +92,14 @@ export function decideAction(
   const resourceAdj = adjPositions.find(p => grid[p.y][p.x].type === 'resource')
   const resourceProgress = agent.resources / RESOURCE_WIN_THRESHOLD
 
-  // Nearby agents (within 5 tiles)
-  const nearbyOthers = liveOthers.filter(a => distance(a.position, agent.position) <= 5)
+  // Agents visible within vision radius (memory-driven)
+  const visionRadius = getVisionRadius(traits.memory)
+  // Allied agents share vision: include anyone seen by any ally
+  const allyAgents = liveOthers.filter(a => agent.relations[a.id]?.allied)
+  const nearbyOthers = liveOthers.filter(a => {
+    if (distance(a.position, agent.position) <= visionRadius) return true
+    return allyAgents.some(ally => distance(a.position, ally.position) <= getVisionRadius(ally.traits.memory))
+  })
   const nearbyAllies = nearbyOthers.filter(a => agent.relations[a.id]?.allied)
   const nearbyEnemies = nearbyOthers.filter(a => !agent.relations[a.id]?.allied)
 
@@ -103,18 +114,22 @@ export function decideAction(
   })
 
   // --- Betrayal ---
-  // Greed tempts betrayal when ally has far more resources than self
+  // Pressure is driven by what there is to GAIN, resisted by loyalty.
+  // An agent with nothing to steal should almost never betray.
   const betrayalCandidates = liveOthers.filter(a => {
     const rel = agent.relations[a.id]
     if (!rel?.allied) return false
     const allianceAge = tick - rel.allianceTick
-    const agePressure = Math.max(0, (allianceAge - ALLIANCE_PRESSURE_START) / 100)
-    const greedTemptation = traits.greed * Math.max(0, (a.resources - agent.resources) / 60) * 0.35
-    const totalPressure = clamp(
-      (1 - traits.loyalty) + agePressure + standoffPressure * 0.5 + greedTemptation + noise(),
-      0, 1
-    )
-    return totalPressure > 0.55
+    // Age pressure: only kicks in after a long stable alliance, grows very slowly
+    const agePressure = Math.max(0, (allianceAge - 150) / 400)
+    // Greed only fires if ally holds a meaningful amount more than self
+    const resourceGain = Math.max(0, a.resources - Math.max(agent.resources, 10))
+    const greedTemptation = traits.greed * Math.min(1, resourceGain / 60)
+    // Sum of pressures from all sources
+    const rawPressure = agePressure + greedTemptation * 0.7 + standoffPressure * 0.45
+    // Loyalty raises the threshold — highly loyal agents need extreme pressure to betray
+    const threshold = 0.3 + traits.loyalty * 0.65
+    return rawPressure + noise() * 0.25 > threshold
   })
 
   // --- Attack ---
@@ -188,8 +203,13 @@ export function decideAction(
 
   const allianceUtility = potentialAllies.length > 0 ? traits.trust * 0.8 + noise() : 0
 
+  // Gain from betrayal: how much the richest betrayable ally has
+  const betrayGain = betrayalCandidates.reduce((max, a) => Math.max(max, a.resources), 0)
   const betrayUtility = betrayalCandidates.length > 0
-    ? (1 - traits.loyalty) * 0.7 + standoffPressure * 0.3 + noise()
+    ? (1 - traits.loyalty) * 0.3
+      + Math.min(1, betrayGain / RESOURCE_WIN_THRESHOLD) * 0.5
+      + standoffPressure * 0.3
+      + noise()
     : 0
 
   const moveUtility = 0.3 + gatherUrgency * 0.2 + noise()
@@ -250,7 +270,7 @@ export function decideAction(
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, occupied, width, height, resourceProgress) }
+  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress) }
 }
 
 function findFleeTarget(
@@ -261,10 +281,11 @@ function findFleeTarget(
   width: number,
   height: number
 ): Position {
-  const prev = agent.prevPosition
+  const recentSet = new Set(agent.positionHistory.map(p => `${p.x},${p.y}`))
   const adj = adjacentPositions(agent.position, width, height)
+  // Prefer positions not in recent history to prevent oscillation
   const free = adj.filter(
-    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !(p.x === prev.x && p.y === prev.y)
+    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !recentSet.has(`${p.x},${p.y}`)
   )
   const candidates = free.length > 0
     ? free
@@ -277,42 +298,48 @@ function findMoveTarget(
   agent: AgentState,
   grid: Cell[][],
   liveOthers: AgentState[],
+  allies: AgentState[],
   occupied: Set<string>,
   width: number,
   height: number,
   resourceProgress = 0
 ): Position {
-  const prev = agent.prevPosition
-  const isPrev = (p: Position) => p.x === prev.x && p.y === prev.y
+  // Build a set of recently visited positions to prevent oscillation cycles
+  const recentSet = new Set(agent.positionHistory.map(p => `${p.x},${p.y}`))
 
-  const freeAdj = adjacentPositions(agent.position, width, height).filter(
-    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !isPrev(p)
+  const adj = adjacentPositions(agent.position, width, height)
+  // Prefer cells not in recent history; fall back progressively if cornered
+  const freeAdj = adj.filter(
+    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`) && !recentSet.has(`${p.x},${p.y}`)
   )
-  const freeAdjWithPrev = adjacentPositions(agent.position, width, height).filter(
+  const freeAdjWithRecent = adj.filter(
     p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`)
   )
-  const walkableAdj = adjacentPositions(agent.position, width, height).filter(
-    p => grid[p.y][p.x].type !== 'obstacle'
-  )
+  const walkableAdj = adj.filter(p => grid[p.y][p.x].type !== 'obstacle')
   const candidates = freeAdj.length > 0 ? freeAdj
-    : freeAdjWithPrev.length > 0 ? freeAdjWithPrev
+    : freeAdjWithRecent.length > 0 ? freeAdjWithRecent
     : walkableAdj
 
   if (candidates.length === 0) return agent.position
 
-  // 1. Memory-based resource scan: high-memory agents see further
-  const scanRadius = Math.max(3, Math.round(agent.traits.memory * 15))
+  // 1. Resource scan: own vision + shared ally vision
+  const scanPoints: { pos: Position; radius: number }[] = [
+    { pos: agent.position, radius: getVisionRadius(agent.traits.memory) },
+    ...allies.map(a => ({ pos: a.position, radius: getVisionRadius(a.traits.memory) })),
+  ]
   let nearestResource: Position | null = null
   let nearestResourceDist = Infinity
-  for (let dy = -scanRadius; dy <= scanRadius; dy++) {
-    for (let dx = -scanRadius; dx <= scanRadius; dx++) {
-      const nx = agent.position.x + dx
-      const ny = agent.position.y + dy
-      if (grid[ny]?.[nx]?.type === 'resource') {
-        const d = Math.abs(dx) + Math.abs(dy)
-        if (d < nearestResourceDist) {
-          nearestResourceDist = d
-          nearestResource = { x: nx, y: ny }
+  for (const { pos: origin, radius } of scanPoints) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = origin.x + dx
+        const ny = origin.y + dy
+        if (grid[ny]?.[nx]?.type === 'resource') {
+          const d = distance({ x: nx, y: ny }, agent.position)
+          if (d < nearestResourceDist) {
+            nearestResourceDist = d
+            nearestResource = { x: nx, y: ny }
+          }
         }
       }
     }
