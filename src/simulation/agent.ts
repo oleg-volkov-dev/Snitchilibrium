@@ -357,15 +357,31 @@ export function modifyResentment(agent: AgentState, targetId: string, delta: num
   rel.resentment = clamp(rel.resentment + delta, 0, 1)
 }
 
+// All agents share the same trait point total so no agent starts with an inherent stat advantage.
+const TRAIT_TOTAL = 3.5
+
 export function randomizeTraits(base: Partial<AgentTraits> = {}): AgentTraits {
-  const rand = () => clamp(randomFloat(0, 1), 0, 1)
+  const raw = {
+    aggression: base.aggression ?? randomFloat(0, 1),
+    trust: base.trust ?? randomFloat(0, 1),
+    loyalty: base.loyalty ?? randomFloat(0, 1),
+    greed: base.greed ?? randomFloat(0, 1),
+    riskTolerance: base.riskTolerance ?? randomFloat(0, 1),
+    memory: base.memory ?? randomFloat(0, 1),
+    irrationality: base.irrationality ?? randomFloat(0, 0.35),
+  }
+
+  // Normalize so the sum equals TRAIT_TOTAL, then clamp each to [0, 1]
+  const sum = Object.values(raw).reduce((a, b) => a + b, 0)
+  const scale = TRAIT_TOTAL / sum
+
   return {
-    aggression: base.aggression ?? rand(),
-    trust: base.trust ?? rand(),
-    loyalty: base.loyalty ?? rand(),
-    greed: base.greed ?? rand(),
-    riskTolerance: base.riskTolerance ?? rand(),
-    memory: base.memory ?? rand(),
-    irrationality: base.irrationality ?? clamp(randomFloat(0, 0.35), 0, 1),
+    aggression: clamp(raw.aggression * scale, 0, 1),
+    trust: clamp(raw.trust * scale, 0, 1),
+    loyalty: clamp(raw.loyalty * scale, 0, 1),
+    greed: clamp(raw.greed * scale, 0, 1),
+    riskTolerance: clamp(raw.riskTolerance * scale, 0, 1),
+    memory: clamp(raw.memory * scale, 0, 1),
+    irrationality: clamp(raw.irrationality * scale, 0, 1),
   }
 }
