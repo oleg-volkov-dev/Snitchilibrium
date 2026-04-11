@@ -43,8 +43,11 @@ export function createSimulation(config: SimulationConfig): SimulationState {
   const positions = shuffle(findEmptyPositions(grid, []))
 
   if (config.usePresetAgents) {
-    for (let i = 0; i < AGENT_PRESETS.length; i++) {
-      const preset = AGENT_PRESETS[i]
+    const activePresets = config.selectedPresets && config.selectedPresets.length >= 2
+      ? AGENT_PRESETS.filter(p => config.selectedPresets!.includes(p.name))
+      : AGENT_PRESETS
+    for (let i = 0; i < activePresets.length; i++) {
+      const preset = activePresets[i]
       const pos = positions[i] ?? { x: 0, y: 0 }
       agents.push(createAgent(`agent-${i}`, preset.name, pos, agentColor(i), preset.traits))
     }
@@ -353,12 +356,16 @@ function applyAction(
       modifyResentment(target, agent.id, 0.25)
       modifyTrust(target, agent.id, -0.3)
 
-      // Break alliance if one existed
+      // Break alliance if one existed — all former group members resent the attacker
       const rel = getOrInitRelation(target, agent.id)
       if (rel.allied) {
-        rel.allied = false
-        getOrInitRelation(agent, target.id).allied = false
-        modifyResentment(target, agent.id, 0.5)
+        const formerAllies = allianceGroupOf(agent.id, agentById).filter(m => m.id !== agent.id)
+        for (const member of formerAllies) {
+          getOrInitRelation(agent, member.id).allied = false
+          getOrInitRelation(member, agent.id).allied = false
+          modifyResentment(member, agent.id, 0.5)
+          modifyTrust(member, agent.id, -0.3)
+        }
         log('betray-ally', `${agent.name} attacked ally ${target.name}!`, target.id)
       } else {
         log('attack', `${agent.name} attacked ${target.name} for ${damage} damage`, target.id)

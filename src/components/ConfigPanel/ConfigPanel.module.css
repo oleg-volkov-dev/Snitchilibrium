@@ -111,6 +111,29 @@
   background: #4338ca;
 }
 
+.presetGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.presetChip {
+  padding: 4px 8px;
+  background: #1e2a3f;
+  color: #64748b;
+  border: 1px solid #2a3550;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.presetChip:hover {
+  background: #243047;
+  color: #c9d4e8;
+}
+
 .apply {
   padding: 7px 0;
   background: #4f46e5;

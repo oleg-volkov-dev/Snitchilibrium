@@ -52,6 +52,37 @@ export function ConfigPanel() {
             </div>
           </div>
 
+          {/* Preset picker — shown only in preset mode */}
+          {local.usePresetAgents && (() => {
+            const active = local.selectedPresets ?? AGENT_PRESETS.map(p => p.name)
+            return (
+              <div className={styles.fieldColumn}>
+                <label>Active Archetypes ({active.length})</label>
+                <div className={styles.presetGrid}>
+                  {AGENT_PRESETS.map(p => {
+                    const isActive = active.includes(p.name)
+                    return (
+                      <button
+                        key={p.name}
+                        title={p.description}
+                        className={`${styles.presetChip} ${isActive ? styles.optionActive : ''}`}
+                        onClick={() => {
+                          if (isActive && active.length <= 2) return
+                          const next = isActive
+                            ? active.filter(n => n !== p.name)
+                            : [...active, p.name]
+                          setLocal(c => ({ ...c, selectedPresets: next }))
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Agent count — only relevant in random mode */}
           {!local.usePresetAgents && (
             <div className={styles.field}>

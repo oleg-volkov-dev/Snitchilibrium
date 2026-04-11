@@ -73,7 +73,8 @@ export interface SimulationConfig {
   world: WorldConfig
   tickIntervalMs: number
   maxTicks: number
-  usePresetAgents: boolean  // true = spawn the 12 named archetypes; false = random traits
+  usePresetAgents: boolean   // true = spawn named archetypes; false = random traits
+  selectedPresets?: string[] // subset of preset names to spawn; undefined = all
 }
 
 export interface EventLogEntry {
