@@ -336,6 +336,8 @@ function applyAction(
       const target = agentById.get(action.targetId)
       if (!target || !target.alive) break
       if (distance(agent.position, target.position) > 1) break
+      // Hard guard: never allow attacking a current ally — use betray-ally for that
+      if (agent.relations[target.id]?.allied) break
 
       // Base damage
       let attackPower = 10 + randomFloat(0, 10) * (0.5 + agent.traits.aggression * 0.5)
@@ -356,20 +358,7 @@ function applyAction(
       modifyResentment(target, agent.id, 0.25)
       modifyTrust(target, agent.id, -0.3)
 
-      // Break alliance if one existed — all former group members resent the attacker
-      const rel = getOrInitRelation(target, agent.id)
-      if (rel.allied) {
-        const formerAllies = allianceGroupOf(agent.id, agentById).filter(m => m.id !== agent.id)
-        for (const member of formerAllies) {
-          getOrInitRelation(agent, member.id).allied = false
-          getOrInitRelation(member, agent.id).allied = false
-          modifyResentment(member, agent.id, 0.5)
-          modifyTrust(member, agent.id, -0.3)
-        }
-        log('betray-ally', `${agent.name} attacked ally ${target.name}!`, target.id)
-      } else {
-        log('attack', `${agent.name} attacked ${target.name} for ${damage} damage`, target.id)
-      }
+      log('attack', `${agent.name} attacked ${target.name} for ${damage} damage`, target.id)
 
       if (target.health <= 0) {
         const totalLoot = Math.floor(target.resources * 0.5)
