@@ -73,6 +73,7 @@ export function AgentPanel() {
       <TraitBar label="Risk" value={agent.traits.riskTolerance} />
       <TraitBar label="Memory" value={agent.traits.memory} />
       <TraitBar label="Irrationality" value={agent.traits.irrationality} />
+      <TraitBar label="Intellect" value={agent.traits.intellect} />
 
       {allies.length > 0 && (
         <>

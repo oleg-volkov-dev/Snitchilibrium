@@ -31,9 +31,10 @@ export interface AgentTraits {
   trust: number        // 0-1: willingness to form alliances
   loyalty: number      // 0-1: resistance to betrayal
   greed: number        // 0-1: priority on resource gathering
-  riskTolerance: number // 0-1: willingness to take risky actions
-  memory: number       // 0-1: how long they remember past interactions
+  riskTolerance: number // 0-1: brave vs cowardly — flee threshold, attack eagerness
+  memory: number       // 0-1: vision radius + retention of trust/resentment
   irrationality: number // 0-1: deviation from optimal decisions
+  intellect: number    // 0-1: noise suppression, threat awareness, ally vetting, resource efficiency
 }
 
 export interface RelationEntry {
