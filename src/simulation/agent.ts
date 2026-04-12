@@ -219,9 +219,14 @@ export function decideAction(
     (agent.position.x - dzCx) ** 2 + (agent.position.y - dzCy) ** 2
   )
   const inDeathZone = dzRadius !== Infinity && dzDistFromCenter > dzRadius
-  const dzFleeUtility = inDeathZone
+  // Very greedy agents near the win threshold may sacrifice HP to collect zone resources.
+  // They suppress the normal flee-the-zone behaviour unless health drops critically low.
+  const greedyDash = traits.greed > 0.7 && resourceProgress > 0.6
+  const dzFleeUtility = inDeathZone && !greedyDash
     ? 0.5 + (1 - traits.riskTolerance) * 0.3 + (1 - agent.health / 100) * 0.25 + noise()
-    : 0
+    : inDeathZone && agent.health < 30   // even dashers bail when nearly dead
+      ? 0.9 + noise()
+      : 0
 
   // --- Utility scores ---
   const gatherUrgency = Math.min(1, resourceProgress) * 0.6
@@ -308,7 +313,7 @@ export function decideAction(
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress, dzRadius) }
+  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress, dzRadius, greedyDash) }
 }
 
 function findDeathZoneFleeTarget(
@@ -362,7 +367,8 @@ function findMoveTarget(
   width: number,
   height: number,
   resourceProgress = 0,
-  dzRadius = Infinity
+  dzRadius = Infinity,
+  greedyDash = false
 ): Position {
   const recentSet = new Set(agent.positionHistory.map(p => `${p.x},${p.y}`))
 
@@ -394,6 +400,13 @@ function findMoveTarget(
         const nx = origin.x + dx
         const ny = origin.y + dy
         if (grid[ny]?.[nx]?.type === 'resource') {
+          // Skip resources inside the death zone — agents won't chase them into danger.
+          // Exception: greedy near-winners may dash in for a high-value pickup.
+          if (!greedyDash && dzRadius !== Infinity) {
+            const rCx = (width - 1) / 2
+            const rCy = (height - 1) / 2
+            if (Math.sqrt((nx - rCx) ** 2 + (ny - rCy) ** 2) > dzRadius) continue
+          }
           const d = distance({ x: nx, y: ny }, agent.position)
           const amount = grid[ny][nx].resourceAmount ?? 1
           // Low intellect: pure proximity. High intellect: value per step.
@@ -407,9 +420,16 @@ function findMoveTarget(
       }
     }
   }
-  // High-memory agents can recall last known resource position when nothing is visible
+  // High-memory agents can recall last known resource position when nothing is visible.
+  // Don't chase a remembered resource that's now inside the death zone (unless dashing).
   if (!nearestResource && agent.lastKnownResourcePos && agent.traits.memory > 0.5) {
-    nearestResource = agent.lastKnownResourcePos
+    const mem = agent.lastKnownResourcePos
+    const memInZone = dzRadius !== Infinity && (() => {
+      const cx = (width - 1) / 2
+      const cy = (height - 1) / 2
+      return Math.sqrt((mem.x - cx) ** 2 + (mem.y - cy) ** 2) > dzRadius
+    })()
+    if (!memInZone || greedyDash) nearestResource = mem
   }
   if (nearestResource) {
     return candidates.sort((a, b) => distance(a, nearestResource!) - distance(b, nearestResource!))[0]
