@@ -4,8 +4,8 @@ import { createSimulation, stepSimulation } from '../simulation/engine'
 
 const DEFAULT_CONFIG: SimulationConfig = {
   world: {
-    width: 30,
-    height: 20,
+    width: 40,
+    height: 30,
     agentCount: 10,
     resourceDensity: 0.005,
     obstacleDensity: 0.06,

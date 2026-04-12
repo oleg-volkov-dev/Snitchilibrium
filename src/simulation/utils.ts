@@ -2,7 +2,6 @@ import { Position } from './types'
 
 // Death zone constants — exported so engine and renderer share the same math
 export const DEATH_ZONE_START = 1500       // tick when zone begins shrinking
-export const DEATH_ZONE_DURATION = 2500    // ticks until zone fully closed
 export const DEATH_ZONE_DAMAGE = 3         // HP lost per tick while outside
 
 /** Safe-zone radius in grid tiles. Returns Infinity before zone activates. */
@@ -10,7 +9,10 @@ export function getSafeRadius(tick: number, cols: number, rows: number, deathZon
   if (tick < deathZoneStart) return Infinity
   // Start radius covers the full map diagonal so nothing is damaged initially
   const maxRadius = Math.sqrt(cols * cols + rows * rows) / 2 + 1
-  const progress = Math.min(1, (tick - DEATH_ZONE_START) / DEATH_ZONE_DURATION)
+  // Duration scales with map diagonal: larger maps give agents proportionally more time to reach safety.
+  // Factor of 20 → 40×30 map (diagonal 50) closes in ~1000 ticks; 60×40 (diagonal ~72) in ~1440 ticks.
+  const duration = Math.round(Math.sqrt(cols * cols + rows * rows) * 20)
+  const progress = Math.min(1, (tick - deathZoneStart) / duration)
   return maxRadius * (1 - progress)
 }
 
