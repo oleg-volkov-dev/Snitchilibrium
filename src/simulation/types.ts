@@ -68,6 +68,7 @@ export interface WorldConfig {
   resourceDensity: number  // 0-1
   obstacleDensity: number  // 0-1
   defaultTraits: Partial<AgentTraits>
+  deathZoneStart: number   // tick when the death zone begins shrinking
 }
 
 export interface SimulationConfig {

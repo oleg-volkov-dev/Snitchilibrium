@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Cell, SimulationState } from '../../simulation/types'
 import { getVisionRadius } from '../../simulation/agent'
-import { getSafeRadius, DEATH_ZONE_START } from '../../simulation/utils'
+import { getSafeRadius } from '../../simulation/utils'
 import { useSimulationStore } from '../../store/simulationStore'
 import styles from './Grid.module.css'
 
@@ -218,7 +218,8 @@ function drawGrid(
 
   // Death zone overlay — drawn last so it tints everything outside the safe circle
   const { tick } = simulation
-  const safeRadius = getSafeRadius(tick, cols, rows)
+  const { deathZoneStart } = simulation.config.world
+  const safeRadius = getSafeRadius(tick, cols, rows, deathZoneStart)
   if (safeRadius !== Infinity) {
     const mapCx = (cols / 2) * CELL_SIZE
     const mapCy = (rows / 2) * CELL_SIZE
@@ -261,8 +262,8 @@ function drawGrid(
   }
 
   // Approaching warning: subtle vignette when zone is 300 ticks away
-  if (tick >= DEATH_ZONE_START - 300 && safeRadius === Infinity) {
-    const warnProgress = (tick - (DEATH_ZONE_START - 300)) / 300
+  if (tick >= deathZoneStart - 300 && safeRadius === Infinity) {
+    const warnProgress = (tick - (deathZoneStart - 300)) / 300
     const vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75)
     vign.addColorStop(0, 'rgba(180,20,20,0)')
     vign.addColorStop(1, `rgba(180,20,20,${warnProgress * 0.18})`)

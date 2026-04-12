@@ -105,7 +105,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   for (const agent of shuffle(liveAgents)) {
     if (!agent.alive) continue
     updateRelations(agent)
-    const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure)
+    const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure, state.config.world.deathZoneStart)
     applyAction(agent, action, agentById, newGrid, posMap, tick, newEvents)
 
     // Memory scan: update agent's last known resource position after acting
@@ -137,7 +137,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   // Death zone: shrinking circle that damages agents outside the safe radius
   const dzCols = newGrid[0].length
   const dzRows = newGrid.length
-  const safeRadius = getSafeRadius(tick, dzCols, dzRows)
+  const safeRadius = getSafeRadius(tick, dzCols, dzRows, state.config.world.deathZoneStart)
   if (safeRadius !== Infinity) {
     const cx = (dzCols - 1) / 2
     const cy = (dzRows - 1) / 2

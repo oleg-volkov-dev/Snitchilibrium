@@ -10,6 +10,7 @@ const DEFAULT_CONFIG: SimulationConfig = {
     resourceDensity: 0.005,
     obstacleDensity: 0.06,
     defaultTraits: {},
+    deathZoneStart: 1500,
   },
   tickIntervalMs: 300,
   maxTicks: 5000,

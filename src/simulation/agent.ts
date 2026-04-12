@@ -6,7 +6,7 @@ import {
   Position,
   RelationEntry,
 } from './types'
-import { adjacentPositions, clamp, distance, randomFloat, shuffle } from './utils'
+import { adjacentPositions, clamp, distance, randomFloat, shuffle, getSafeRadius, DEATH_ZONE_START } from './utils'
 
 const DEFAULT_TRAITS: AgentTraits = {
   aggression: 0.3,
@@ -70,7 +70,8 @@ export function decideAction(
   allAgents: AgentState[],
   grid: Cell[][],
   tick: number,
-  standoffPressure: number
+  standoffPressure: number,
+  deathZoneStart = DEATH_ZONE_START
 ): AgentAction {
   const { traits } = agent
   const width = grid[0].length
@@ -208,6 +209,20 @@ export function decideAction(
     ? traits.loyalty * 0.45 + (1 - traits.greed) * 0.35 + noise()
     : 0
 
+  // --- Death zone avoidance ---
+  // If the agent is currently outside the safe radius they should actively flee toward center.
+  // Utility is high enough to override idle wandering but not necessarily active combat/healing.
+  const dzRadius = getSafeRadius(tick, width, height, deathZoneStart)
+  const dzCx = (width - 1) / 2
+  const dzCy = (height - 1) / 2
+  const dzDistFromCenter = Math.sqrt(
+    (agent.position.x - dzCx) ** 2 + (agent.position.y - dzCy) ** 2
+  )
+  const inDeathZone = dzRadius !== Infinity && dzDistFromCenter > dzRadius
+  const dzFleeUtility = inDeathZone
+    ? 0.5 + (1 - traits.riskTolerance) * 0.3 + (1 - agent.health / 100) * 0.25 + noise()
+    : 0
+
   // --- Utility scores ---
   const gatherUrgency = Math.min(1, resourceProgress) * 0.6
   const gatherUtility = resourceAdj ? traits.greed + gatherUrgency + noise() : 0
@@ -237,8 +252,12 @@ export function decideAction(
 
   const best = Math.max(
     gatherUtility, attackUtility, allianceUtility, betrayUtility,
-    healUtility, fleeUtility, supportUtility, shareUtility, moveUtility
+    healUtility, fleeUtility, supportUtility, shareUtility, moveUtility, dzFleeUtility
   )
+
+  if (best === dzFleeUtility && inDeathZone) {
+    return { type: 'move', targetPos: findDeathZoneFleeTarget(agent, grid, occupied, width, height) }
+  }
 
   if (best === fleeUtility && nearestThreat) {
     return { type: 'move', targetPos: findFleeTarget(agent, nearestThreat.position, grid, occupied, width, height) }
@@ -289,7 +308,29 @@ export function decideAction(
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress) }
+  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress, dzRadius) }
+}
+
+function findDeathZoneFleeTarget(
+  agent: AgentState,
+  grid: Cell[][],
+  occupied: Set<string>,
+  width: number,
+  height: number
+): Position {
+  const cx = (width - 1) / 2
+  const cy = (height - 1) / 2
+  const adj = adjacentPositions(agent.position, width, height)
+  const walkable = adj.filter(
+    p => grid[p.y][p.x].type !== 'obstacle' && !occupied.has(`${p.x},${p.y}`)
+  )
+  if (walkable.length === 0) return agent.position
+  // Pick the step that brings us closest to center (euclidean)
+  return walkable.sort((a, b) => {
+    const da = Math.sqrt((a.x - cx) ** 2 + (a.y - cy) ** 2)
+    const db = Math.sqrt((b.x - cx) ** 2 + (b.y - cy) ** 2)
+    return da - db
+  })[0]
 }
 
 function findFleeTarget(
@@ -320,7 +361,8 @@ function findMoveTarget(
   occupied: Set<string>,
   width: number,
   height: number,
-  resourceProgress = 0
+  resourceProgress = 0,
+  dzRadius = Infinity
 ): Position {
   const recentSet = new Set(agent.positionHistory.map(p => `${p.x},${p.y}`))
 
@@ -380,6 +422,16 @@ function findMoveTarget(
       ? enemies.sort((a, b) => b.resources - a.resources)[0]
       : enemies.sort((a, b) => distance(a.position, agent.position) - distance(b.position, agent.position))[0]
     return candidates.sort((a, b) => distance(a, target.position) - distance(b, target.position))[0]
+  }
+
+  // When the death zone is active, prefer cells inside the safe radius over stepping into danger
+  if (dzRadius !== Infinity) {
+    const cx = (width - 1) / 2
+    const cy = (height - 1) / 2
+    const safeCandidates = candidates.filter(
+      p => Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2) <= dzRadius
+    )
+    return shuffle(safeCandidates.length > 0 ? safeCandidates : candidates)[0]
   }
 
   return shuffle(candidates)[0]

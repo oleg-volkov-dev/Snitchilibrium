@@ -6,8 +6,8 @@ export const DEATH_ZONE_DURATION = 2500    // ticks until zone fully closed
 export const DEATH_ZONE_DAMAGE = 3         // HP lost per tick while outside
 
 /** Safe-zone radius in grid tiles. Returns Infinity before zone activates. */
-export function getSafeRadius(tick: number, cols: number, rows: number): number {
-  if (tick < DEATH_ZONE_START) return Infinity
+export function getSafeRadius(tick: number, cols: number, rows: number, deathZoneStart = DEATH_ZONE_START): number {
+  if (tick < deathZoneStart) return Infinity
   // Start radius covers the full map diagonal so nothing is damaged initially
   const maxRadius = Math.sqrt(cols * cols + rows * rows) / 2 + 1
   const progress = Math.min(1, (tick - DEATH_ZONE_START) / DEATH_ZONE_DURATION)

@@ -147,6 +147,18 @@ export function ConfigPanel() {
             </div>
           </div>
 
+          <div className={styles.field}>
+            <label>Death Zone Tick</label>
+            <input
+              type="number"
+              min={100}
+              max={5000}
+              step={100}
+              value={local.world.deathZoneStart}
+              onChange={e => updateWorld('deathZoneStart', Number(e.target.value))}
+            />
+          </div>
+
           <button className={styles.apply} onClick={handleApply}>
             Apply and Reset
           </button>
