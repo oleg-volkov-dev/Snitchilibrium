@@ -134,6 +134,16 @@
   color: #c9d4e8;
 }
 
+.presetChip.optionActive {
+  background: #3730a3;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+.presetChip.optionActive:hover {
+  background: #4338ca;
+}
+
 .apply {
   padding: 7px 0;
   background: #4f46e5;
