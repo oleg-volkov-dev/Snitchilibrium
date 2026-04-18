@@ -19,20 +19,15 @@ function cellRng(gx: number, gy: number, seed: number): number {
   return s - Math.floor(s)
 }
 
-// Dark stone-floor texture for one cell.
-// Low-frequency slab pattern + per-cell grain gives visible stone variation.
+// Dark mossy-green floor tile. Very low variance so all cells read as one smooth surface.
 function drawGroundCell(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const r0 = cellRng(x, y, 0)
-  const r1 = cellRng(x, y, 1)
-  const r2 = cellRng(x, y, 2)
-  // Low-frequency pattern simulates uneven stone slabs
-  const slab = (Math.sin(x * 0.61 + y * 0.47) * Math.sin(x * 0.29 - y * 0.73) + 1) * 0.5
-  const v = slab * 0.55 + r0 * 0.45
-  const lum = Math.round(30 + v * 22)   // 30–52: dark but clearly visible stone
-  // Slight warm/cool shift per cell so slabs have individual character
-  const rch = Math.round(lum + r1 * 5 - 2)
-  const bch = Math.round(lum - r2 * 4)
-  ctx.fillStyle = `rgb(${rch},${lum},${bch})`
+  const r = cellRng(x, y, 0)
+  // Tiny wave + grain combined, then compressed to a small lum window
+  const v = r * 0.5 + (Math.sin(x * 0.38 + y * 0.27) + 1) * 0.25   // [0, ~1]
+  const lum = Math.round(13 + v * 5)    // 13–18 % lightness — tight range = smooth look
+  const hue = Math.round(115 + v * 6)   // 115–121 ° — consistent green
+  const sat = Math.round(15 + v * 4)    // 15–19 % — desaturated so it reads as dark ground
+  ctx.fillStyle = `hsl(${hue},${sat}%,${lum}%)`
   ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 }
 
