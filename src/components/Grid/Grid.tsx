@@ -12,6 +12,140 @@ function ease(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
 
+// Deterministic pseudo-random [0,1] keyed to a grid cell + seed index.
+// Same cell always produces the same value so rocks look stable across frames.
+function cellRng(gx: number, gy: number, seed: number): number {
+  const s = Math.sin(gx * 127.1 + gy * 311.7 + seed * 74.3)
+  return s - Math.floor(s)
+}
+
+// Earthy stone-floor texture for one empty cell.
+// Two overlapping sine waves give a low-frequency pattern; per-cell grain adds variation.
+function drawGroundCell(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const wave = Math.sin(x * 1.4 + y * 0.9) * Math.sin(x * 0.5 - y * 1.2) * 0.4 + 0.4
+  const grain = cellRng(x, y, 0) * 0.6
+  const v = wave * 0.5 + grain * 0.5        // [0, 1]
+  const lum = 9 + v * 8
+  ctx.fillStyle = `rgb(${Math.round(lum * 0.82)},${Math.round(lum * 0.88)},${Math.round(lum * 1.18)})`
+  ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+}
+
+// Procedural rock boulder: irregular polygon, lit from top-left, with a crack detail.
+function drawRock(ctx: CanvasRenderingContext2D, gx: number, gy: number) {
+  const cx = gx * CELL_SIZE + CELL_SIZE / 2
+  const cy = gy * CELL_SIZE + CELL_SIZE / 2
+  const rng = (n: number) => cellRng(gx, gy, n)
+  const nPts = 8
+  const baseR = CELL_SIZE * 0.42
+
+  // Shadow: same polygon, offset bottom-right
+  ctx.beginPath()
+  for (let i = 0; i < nPts; i++) {
+    const ang = (i / nPts) * Math.PI * 2 - Math.PI / 2
+    const r = baseR * (0.70 + rng(i) * 0.30)
+    const px = cx + 1.5 + Math.cos(ang) * r
+    const py = cy + 2.5 + Math.sin(ang) * r
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(0,0,0,0.38)'
+  ctx.fill()
+
+  // Rock body
+  ctx.beginPath()
+  for (let i = 0; i < nPts; i++) {
+    const ang = (i / nPts) * Math.PI * 2 - Math.PI / 2
+    const r = baseR * (0.70 + rng(i) * 0.30)
+    i === 0
+      ? ctx.moveTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r)
+      : ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r)
+  }
+  ctx.closePath()
+
+  const hlx = cx - baseR * 0.28
+  const hly = cy - baseR * 0.32
+  const hue = 210 + rng(9) * 25
+  const sat = 6 + rng(10) * 8
+  const grad = ctx.createRadialGradient(hlx, hly, 0, cx + baseR * 0.15, cy + baseR * 0.15, baseR * 1.1)
+  grad.addColorStop(0,    `hsl(${hue},${sat}%,${50 + rng(11) * 10}%)`)
+  grad.addColorStop(0.45, `hsl(${hue},${sat}%,${28 + rng(12) * 7}%)`)
+  grad.addColorStop(1,    `hsl(${hue},${sat}%,${11 + rng(13) * 5}%)`)
+  ctx.fillStyle = grad
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+  ctx.lineWidth = 0.75
+  ctx.stroke()
+
+  // Specular highlight dot at top-left
+  ctx.beginPath()
+  ctx.arc(hlx + baseR * 0.1, hly + baseR * 0.1, baseR * 0.12, 0, Math.PI * 2)
+  ctx.fillStyle = `rgba(255,255,255,${0.12 + rng(14) * 0.10})`
+  ctx.fill()
+
+  // Crack detail — present on ~70 % of rocks
+  if (rng(15) > 0.3) {
+    const x1 = cx + (rng(16) - 0.5) * baseR * 0.7
+    const y1 = cy + (rng(17) - 0.5) * baseR * 0.5
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x1 + (rng(18) - 0.5) * baseR * 0.55, y1 + (rng(19) - 0.5) * baseR * 0.55)
+    ctx.strokeStyle = `rgba(0,0,0,${0.22 + rng(20) * 0.18})`
+    ctx.lineWidth = 0.7
+    ctx.stroke()
+  }
+}
+
+// Diamond gem resource: glowing halo + faceted shape + specular dot.
+function drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, cell: Cell) {
+  const cx = x * CELL_SIZE + CELL_SIZE / 2
+  const cy = y * CELL_SIZE + CELL_SIZE / 2
+  const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
+  const gemR = CELL_SIZE * (0.15 + 0.18 * intensity)
+
+  // Outer glow halo
+  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, gemR * 2.8)
+  halo.addColorStop(0,    `rgba(74,222,128,${0.40 + intensity * 0.35})`)
+  halo.addColorStop(0.45, `rgba(34,197,94,${0.15 + intensity * 0.15})`)
+  halo.addColorStop(1,    'rgba(34,197,94,0)')
+  ctx.fillStyle = halo
+  ctx.beginPath()
+  ctx.arc(cx, cy, gemR * 2.8, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Diamond / gem silhouette
+  ctx.beginPath()
+  ctx.moveTo(cx,                cy - gemR)
+  ctx.lineTo(cx + gemR * 0.68,  cy)
+  ctx.lineTo(cx,                cy + gemR * 0.82)
+  ctx.lineTo(cx - gemR * 0.68,  cy)
+  ctx.closePath()
+
+  const gemGrad = ctx.createLinearGradient(cx, cy - gemR, cx, cy + gemR)
+  gemGrad.addColorStop(0,   'rgba(187,247,208,0.95)')
+  gemGrad.addColorStop(0.4, 'rgba(52,211,153,0.90)')
+  gemGrad.addColorStop(1,   'rgba(6,78,59,0.85)')
+  ctx.fillStyle = gemGrad
+  ctx.fill()
+  ctx.strokeStyle = `rgba(134,239,172,${0.60 + intensity * 0.35})`
+  ctx.lineWidth = 0.75
+  ctx.stroke()
+
+  // Top-facet crease
+  ctx.beginPath()
+  ctx.moveTo(cx - gemR * 0.68, cy)
+  ctx.lineTo(cx, cy - gemR)
+  ctx.lineTo(cx + gemR * 0.68, cy)
+  ctx.strokeStyle = `rgba(187,247,208,${0.28 + intensity * 0.22})`
+  ctx.lineWidth = 0.5
+  ctx.stroke()
+
+  // Specular dot
+  ctx.beginPath()
+  ctx.arc(cx - gemR * 0.22, cy - gemR * 0.28, gemR * 0.18, 0, Math.PI * 2)
+  ctx.fillStyle = `rgba(255,255,255,${0.60 + intensity * 0.30})`
+  ctx.fill()
+}
+
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   simulation: SimulationState,
@@ -27,66 +161,42 @@ function drawGrid(
 
   ctx.clearRect(0, 0, W, H)
 
-  // Background
-  ctx.fillStyle = '#0d1117'
-  ctx.fillRect(0, 0, W, H)
-
-  // Cells
+  // Ground: per-cell stone-floor texture (all cells, obstacles get it too as a base)
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const cell: Cell = grid[y][x]
-      const cx = x * CELL_SIZE
-      const cy = y * CELL_SIZE
-
-      if (cell.type === 'obstacle') {
-        ctx.fillStyle = '#1c2333'
-        ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        ctx.strokeStyle = '#263044'
-        ctx.lineWidth = 1
-        const pad = CELL_SIZE * 0.3
-        ctx.beginPath()
-        ctx.moveTo(cx + pad, cy + pad)
-        ctx.lineTo(cx + CELL_SIZE - pad, cy + CELL_SIZE - pad)
-        ctx.moveTo(cx + CELL_SIZE - pad, cy + pad)
-        ctx.lineTo(cx + pad, cy + CELL_SIZE - pad)
-        ctx.stroke()
-      } else if (cell.type === 'resource') {
-        ctx.fillStyle = '#0d1117'
-        ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
-        const rcx = cx + CELL_SIZE / 2
-        const rcy = cy + CELL_SIZE / 2
-        const r = CELL_SIZE * 0.1 + CELL_SIZE * 0.25 * intensity
-        const grad = ctx.createRadialGradient(rcx, rcy, 0, rcx, rcy, r * 2)
-        grad.addColorStop(0, `rgba(74, 222, 128, ${0.6 + intensity * 0.4})`)
-        grad.addColorStop(0.5, `rgba(34, 197, 94, ${0.25 + intensity * 0.3})`)
-        grad.addColorStop(1, 'rgba(34, 197, 94, 0)')
-        ctx.fillStyle = grad
-        ctx.beginPath()
-        ctx.arc(rcx, rcy, r * 2, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.fillStyle = `rgba(134, 239, 172, ${0.7 + intensity * 0.3})`
-        ctx.beginPath()
-        ctx.arc(rcx, rcy, r, 0, Math.PI * 2)
-        ctx.fill()
-      }
+      drawGroundCell(ctx, x, y)
     }
   }
 
-  // Grid lines (very subtle)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)'
+  // Rocks — second pass so their drop-shadows sit on top of ground only
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (grid[y][x].type === 'obstacle') drawRock(ctx, x, y)
+    }
+  }
+
+  // Resources — diamond gems with glow halos
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (grid[y][x].type === 'resource') drawResource(ctx, x, y, grid[y][x])
+    }
+  }
+
+  // Arena vignette: darken the map edges to frame the battlefield
+  const vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.72)
+  vign.addColorStop(0, 'rgba(0,0,0,0)')
+  vign.addColorStop(1, 'rgba(0,0,0,0.52)')
+  ctx.fillStyle = vign
+  ctx.fillRect(0, 0, W, H)
+
+  // Grid lines — kept faint for readability
+  ctx.strokeStyle = 'rgba(255,255,255,0.022)'
   ctx.lineWidth = 0.5
   for (let x = 0; x <= cols; x++) {
-    ctx.beginPath()
-    ctx.moveTo(x * CELL_SIZE, 0)
-    ctx.lineTo(x * CELL_SIZE, H)
-    ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(x * CELL_SIZE, 0); ctx.lineTo(x * CELL_SIZE, H); ctx.stroke()
   }
   for (let y = 0; y <= rows; y++) {
-    ctx.beginPath()
-    ctx.moveTo(0, y * CELL_SIZE)
-    ctx.lineTo(W, y * CELL_SIZE)
-    ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(0, y * CELL_SIZE); ctx.lineTo(W, y * CELL_SIZE); ctx.stroke()
   }
 
   // Interpolated agent center helper
