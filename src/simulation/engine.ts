@@ -28,8 +28,8 @@ import {
   DEATH_ZONE_DAMAGE,
 } from './utils'
 
-// Per-cell per-tick probability. 600 cells × 0.000018 ≈ 1 new resource every ~93 ticks.
-const RESOURCE_SPAWN_RATE = 0.000018
+// Per-cell per-tick probability. 600 cells × 0.000028 ≈ 1 new resource every ~60 ticks.
+const RESOURCE_SPAWN_RATE = 0.000028
 
 // If all survivors are allied for this many ticks straight, they win together
 const STANDOFF_TIMEOUT = 60

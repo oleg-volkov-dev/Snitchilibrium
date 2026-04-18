@@ -19,78 +19,85 @@ function cellRng(gx: number, gy: number, seed: number): number {
   return s - Math.floor(s)
 }
 
-// Earthy stone-floor texture for one empty cell.
-// Two overlapping sine waves give a low-frequency pattern; per-cell grain adds variation.
+// Dark stone-floor texture for one cell.
+// Low-frequency slab pattern + per-cell grain gives visible stone variation.
 function drawGroundCell(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const wave = Math.sin(x * 1.4 + y * 0.9) * Math.sin(x * 0.5 - y * 1.2) * 0.4 + 0.4
-  const grain = cellRng(x, y, 0) * 0.6
-  const v = wave * 0.5 + grain * 0.5        // [0, 1]
-  const lum = 9 + v * 8
-  ctx.fillStyle = `rgb(${Math.round(lum * 0.82)},${Math.round(lum * 0.88)},${Math.round(lum * 1.18)})`
+  const r0 = cellRng(x, y, 0)
+  const r1 = cellRng(x, y, 1)
+  const r2 = cellRng(x, y, 2)
+  // Low-frequency pattern simulates uneven stone slabs
+  const slab = (Math.sin(x * 0.61 + y * 0.47) * Math.sin(x * 0.29 - y * 0.73) + 1) * 0.5
+  const v = slab * 0.55 + r0 * 0.45
+  const lum = Math.round(30 + v * 22)   // 30–52: dark but clearly visible stone
+  // Slight warm/cool shift per cell so slabs have individual character
+  const rch = Math.round(lum + r1 * 5 - 2)
+  const bch = Math.round(lum - r2 * 4)
+  ctx.fillStyle = `rgb(${rch},${lum},${bch})`
   ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 }
 
-// Procedural rock boulder: irregular polygon, lit from top-left, with a crack detail.
+// Procedural rock boulder: organic polygon, lit from top-left, with crack detail.
 function drawRock(ctx: CanvasRenderingContext2D, gx: number, gy: number) {
   const cx = gx * CELL_SIZE + CELL_SIZE / 2
   const cy = gy * CELL_SIZE + CELL_SIZE / 2
   const rng = (n: number) => cellRng(gx, gy, n)
-  const nPts = 8
-  const baseR = CELL_SIZE * 0.42
+  const nPts = 10
+  const baseR = CELL_SIZE * 0.43
 
-  // Shadow: same polygon, offset bottom-right
-  ctx.beginPath()
+  // Pre-generate organic outline — large radius variance makes rocks look natural
+  const pts: [number, number][] = []
   for (let i = 0; i < nPts; i++) {
     const ang = (i / nPts) * Math.PI * 2 - Math.PI / 2
-    const r = baseR * (0.70 + rng(i) * 0.30)
-    const px = cx + 1.5 + Math.cos(ang) * r
-    const py = cy + 2.5 + Math.sin(ang) * r
-    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+    const r = baseR * (0.55 + rng(i) * 0.45)   // variance 0.55–1.0 × baseR
+    pts.push([Math.cos(ang) * r, Math.sin(ang) * r])
   }
-  ctx.closePath()
-  ctx.fillStyle = 'rgba(0,0,0,0.38)'
+
+  // Helper: trace the rock outline with an optional offset for the shadow
+  const trace = (ox: number, oy: number) => {
+    ctx.beginPath()
+    ctx.moveTo(cx + pts[0][0] + ox, cy + pts[0][1] + oy)
+    for (let i = 1; i < nPts; i++) ctx.lineTo(cx + pts[i][0] + ox, cy + pts[i][1] + oy)
+    ctx.closePath()
+  }
+
+  // Drop shadow (offset copy of the polygon)
+  trace(2.5, 3.5)
+  ctx.fillStyle = 'rgba(0,0,0,0.48)'
   ctx.fill()
 
-  // Rock body
-  ctx.beginPath()
-  for (let i = 0; i < nPts; i++) {
-    const ang = (i / nPts) * Math.PI * 2 - Math.PI / 2
-    const r = baseR * (0.70 + rng(i) * 0.30)
-    i === 0
-      ? ctx.moveTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r)
-      : ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r)
-  }
-  ctx.closePath()
-
+  // Rock body — warm grey-brown, lit from upper-left
+  trace(0, 0)
+  const hue = 28 + rng(9) * 24       // earthy brown-grey
+  const sat = 6 + rng(10) * 10
   const hlx = cx - baseR * 0.28
-  const hly = cy - baseR * 0.32
-  const hue = 210 + rng(9) * 25
-  const sat = 6 + rng(10) * 8
-  const grad = ctx.createRadialGradient(hlx, hly, 0, cx + baseR * 0.15, cy + baseR * 0.15, baseR * 1.1)
-  grad.addColorStop(0,    `hsl(${hue},${sat}%,${50 + rng(11) * 10}%)`)
-  grad.addColorStop(0.45, `hsl(${hue},${sat}%,${28 + rng(12) * 7}%)`)
-  grad.addColorStop(1,    `hsl(${hue},${sat}%,${11 + rng(13) * 5}%)`)
+  const hly = cy - baseR * 0.33
+  const grad = ctx.createRadialGradient(hlx, hly, 0, cx + baseR * 0.15, cy + baseR * 0.2, baseR * 1.2)
+  grad.addColorStop(0,    `hsl(${hue},${sat}%,${62 + rng(11) * 10}%)`)   // bright highlight
+  grad.addColorStop(0.38, `hsl(${hue},${sat}%,${36 + rng(12) * 8}%)`)   // mid-tone
+  grad.addColorStop(1,    `hsl(${hue},${sat}%,${15 + rng(13) * 6}%)`)   // dark shadow edge
   ctx.fillStyle = grad
   ctx.fill()
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)'
-  ctx.lineWidth = 0.75
+
+  // Outline — slightly darker than the dark edge
+  ctx.strokeStyle = `hsl(${hue},${sat}%,10%)`
+  ctx.lineWidth = 0.9
   ctx.stroke()
 
   // Specular highlight dot at top-left
   ctx.beginPath()
-  ctx.arc(hlx + baseR * 0.1, hly + baseR * 0.1, baseR * 0.12, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(255,255,255,${0.12 + rng(14) * 0.10})`
+  ctx.arc(hlx + baseR * 0.1, hly + baseR * 0.12, baseR * 0.13, 0, Math.PI * 2)
+  ctx.fillStyle = `rgba(255,255,255,${0.22 + rng(14) * 0.14})`
   ctx.fill()
 
-  // Crack detail — present on ~70 % of rocks
-  if (rng(15) > 0.3) {
-    const x1 = cx + (rng(16) - 0.5) * baseR * 0.7
-    const y1 = cy + (rng(17) - 0.5) * baseR * 0.5
+  // Crack detail — present on ~65 % of rocks
+  if (rng(15) > 0.35) {
+    const x1 = cx + (rng(16) - 0.5) * baseR * 0.8
+    const y1 = cy + (rng(17) - 0.5) * baseR * 0.55
     ctx.beginPath()
     ctx.moveTo(x1, y1)
-    ctx.lineTo(x1 + (rng(18) - 0.5) * baseR * 0.55, y1 + (rng(19) - 0.5) * baseR * 0.55)
-    ctx.strokeStyle = `rgba(0,0,0,${0.22 + rng(20) * 0.18})`
-    ctx.lineWidth = 0.7
+    ctx.lineTo(x1 + (rng(18) - 0.5) * baseR * 0.65, y1 + rng(19) * baseR * 0.45)
+    ctx.strokeStyle = `rgba(0,0,0,${0.32 + rng(20) * 0.26})`
+    ctx.lineWidth = 0.8
     ctx.stroke()
   }
 }
