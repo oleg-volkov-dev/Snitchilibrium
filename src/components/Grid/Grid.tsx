@@ -19,15 +19,9 @@ function cellRng(gx: number, gy: number, seed: number): number {
   return s - Math.floor(s)
 }
 
-// Dark mossy-green floor tile. Very low variance so all cells read as one smooth surface.
+// Flat dark-green floor — single colour, no per-cell variation.
 function drawGroundCell(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const r = cellRng(x, y, 0)
-  // Tiny wave + grain combined, then compressed to a small lum window
-  const v = r * 0.5 + (Math.sin(x * 0.38 + y * 0.27) + 1) * 0.25   // [0, ~1]
-  const lum = Math.round(13 + v * 5)    // 13–18 % lightness — tight range = smooth look
-  const hue = Math.round(115 + v * 6)   // 115–121 ° — consistent green
-  const sat = Math.round(15 + v * 4)    // 15–19 % — desaturated so it reads as dark ground
-  ctx.fillStyle = `hsl(${hue},${sat}%,${lum}%)`
+  ctx.fillStyle = '#1a2e1a'
   ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 }
 
@@ -97,54 +91,51 @@ function drawRock(ctx: CanvasRenderingContext2D, gx: number, gy: number) {
   }
 }
 
-// Diamond gem resource: glowing halo + faceted shape + specular dot.
+// Gold coin resource: glowing amber halo + metallic disc + engraved ring + specular.
 function drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, cell: Cell) {
   const cx = x * CELL_SIZE + CELL_SIZE / 2
   const cy = y * CELL_SIZE + CELL_SIZE / 2
   const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
-  const gemR = CELL_SIZE * (0.15 + 0.18 * intensity)
+  const r = CELL_SIZE * (0.17 + 0.14 * intensity)
 
-  // Outer glow halo
-  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, gemR * 2.8)
-  halo.addColorStop(0,    `rgba(74,222,128,${0.40 + intensity * 0.35})`)
-  halo.addColorStop(0.45, `rgba(34,197,94,${0.15 + intensity * 0.15})`)
-  halo.addColorStop(1,    'rgba(34,197,94,0)')
+  // Soft gold glow halo
+  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.6)
+  halo.addColorStop(0,    `rgba(251,191,36,${0.38 + intensity * 0.30})`)
+  halo.addColorStop(0.5,  `rgba(234,179,8,${0.14 + intensity * 0.12})`)
+  halo.addColorStop(1,    'rgba(234,179,8,0)')
   ctx.fillStyle = halo
   ctx.beginPath()
-  ctx.arc(cx, cy, gemR * 2.8, 0, Math.PI * 2)
+  ctx.arc(cx, cy, r * 2.6, 0, Math.PI * 2)
   ctx.fill()
 
-  // Diamond / gem silhouette
+  // Coin body — radial gradient lit from upper-left
+  const coinGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, 0, cx + r * 0.1, cy + r * 0.1, r * 1.1)
+  coinGrad.addColorStop(0,   '#fde68a')   // bright gold highlight
+  coinGrad.addColorStop(0.4, '#f59e0b')   // mid gold
+  coinGrad.addColorStop(1,   '#92400e')   // dark bronze edge
   ctx.beginPath()
-  ctx.moveTo(cx,                cy - gemR)
-  ctx.lineTo(cx + gemR * 0.68,  cy)
-  ctx.lineTo(cx,                cy + gemR * 0.82)
-  ctx.lineTo(cx - gemR * 0.68,  cy)
-  ctx.closePath()
-
-  const gemGrad = ctx.createLinearGradient(cx, cy - gemR, cx, cy + gemR)
-  gemGrad.addColorStop(0,   'rgba(187,247,208,0.95)')
-  gemGrad.addColorStop(0.4, 'rgba(52,211,153,0.90)')
-  gemGrad.addColorStop(1,   'rgba(6,78,59,0.85)')
-  ctx.fillStyle = gemGrad
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = coinGrad
   ctx.fill()
-  ctx.strokeStyle = `rgba(134,239,172,${0.60 + intensity * 0.35})`
-  ctx.lineWidth = 0.75
+
+  // Engraved ring near the rim
+  ctx.beginPath()
+  ctx.arc(cx, cy, r * 0.78, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(146,64,14,0.55)'
+  ctx.lineWidth = 0.8
   ctx.stroke()
 
-  // Top-facet crease
+  // Outer rim outline
   ctx.beginPath()
-  ctx.moveTo(cx - gemR * 0.68, cy)
-  ctx.lineTo(cx, cy - gemR)
-  ctx.lineTo(cx + gemR * 0.68, cy)
-  ctx.strokeStyle = `rgba(187,247,208,${0.28 + intensity * 0.22})`
-  ctx.lineWidth = 0.5
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(120,53,15,0.70)'
+  ctx.lineWidth = 0.9
   ctx.stroke()
 
-  // Specular dot
+  // Specular dot — top-left shine
   ctx.beginPath()
-  ctx.arc(cx - gemR * 0.22, cy - gemR * 0.28, gemR * 0.18, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(255,255,255,${0.60 + intensity * 0.30})`
+  ctx.arc(cx - r * 0.28, cy - r * 0.30, r * 0.20, 0, Math.PI * 2)
+  ctx.fillStyle = `rgba(255,255,255,${0.55 + intensity * 0.25})`
   ctx.fill()
 }
 
