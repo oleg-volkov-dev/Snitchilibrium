@@ -91,52 +91,55 @@ function drawRock(ctx: CanvasRenderingContext2D, gx: number, gy: number) {
   }
 }
 
-// Gold coin resource: glowing amber halo + metallic disc + engraved ring + specular.
+// Gold coin resource: flat yellow disc with rim, inner ring, and cross impression.
 function drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, cell: Cell) {
   const cx = x * CELL_SIZE + CELL_SIZE / 2
   const cy = y * CELL_SIZE + CELL_SIZE / 2
   const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
   const r = CELL_SIZE * (0.17 + 0.14 * intensity)
 
-  // Soft gold glow halo
+  // Soft yellow glow halo
   const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.6)
-  halo.addColorStop(0,    `rgba(251,191,36,${0.38 + intensity * 0.30})`)
-  halo.addColorStop(0.5,  `rgba(234,179,8,${0.14 + intensity * 0.12})`)
-  halo.addColorStop(1,    'rgba(234,179,8,0)')
+  halo.addColorStop(0,   `rgba(253,224,71,${0.36 + intensity * 0.28})`)
+  halo.addColorStop(0.5, `rgba(234,179,8,${0.12 + intensity * 0.10})`)
+  halo.addColorStop(1,   'rgba(234,179,8,0)')
   ctx.fillStyle = halo
   ctx.beginPath()
   ctx.arc(cx, cy, r * 2.6, 0, Math.PI * 2)
   ctx.fill()
 
-  // Coin body — radial gradient lit from upper-left
-  const coinGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, 0, cx + r * 0.1, cy + r * 0.1, r * 1.1)
-  coinGrad.addColorStop(0,   '#fde68a')   // bright gold highlight
-  coinGrad.addColorStop(0.4, '#f59e0b')   // mid gold
-  coinGrad.addColorStop(1,   '#92400e')   // dark bronze edge
+  // Coin face — linear top-to-bottom gradient so it reads flat, not spherical
+  const coinGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r)
+  coinGrad.addColorStop(0,   '#fef08a')   // light yellow top
+  coinGrad.addColorStop(0.45, '#fde047')  // bright yellow mid
+  coinGrad.addColorStop(1,   '#ca8a04')   // darker gold bottom edge
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
   ctx.fillStyle = coinGrad
   ctx.fill()
 
-  // Engraved ring near the rim
-  ctx.beginPath()
-  ctx.arc(cx, cy, r * 0.78, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(146,64,14,0.55)'
-  ctx.lineWidth = 0.8
-  ctx.stroke()
-
-  // Outer rim outline
+  // Thick rim — the key detail that reads as a coin edge
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(120,53,15,0.70)'
-  ctx.lineWidth = 0.9
+  ctx.strokeStyle = '#a16207'
+  ctx.lineWidth = 1.6
   ctx.stroke()
 
-  // Specular dot — top-left shine
+  // Inner engraved ring
   ctx.beginPath()
-  ctx.arc(cx - r * 0.28, cy - r * 0.30, r * 0.20, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(255,255,255,${0.55 + intensity * 0.25})`
-  ctx.fill()
+  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(133,77,14,0.50)'
+  ctx.lineWidth = 0.7
+  ctx.stroke()
+
+  // Cross impression on coin face
+  const ir = r * 0.42
+  ctx.strokeStyle = 'rgba(133,77,14,0.35)'
+  ctx.lineWidth = 0.6
+  ctx.beginPath()
+  ctx.moveTo(cx - ir, cy); ctx.lineTo(cx + ir, cy)
+  ctx.moveTo(cx, cy - ir); ctx.lineTo(cx, cy + ir)
+  ctx.stroke()
 }
 
 function drawGrid(
