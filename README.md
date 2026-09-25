@@ -12,6 +12,22 @@ npm run dev
 
 Open http://localhost:5173
 
+## Arena controls
+
+The arena fits the available screen width. Use **Zoom 1:1** for a scrollable, full-detail view and **Names on/off** to toggle agent labels. Select an agent on the map or with the keyboard-accessible leaderboard to inspect its traits and shared vision. Movement respects your system's reduced-motion preference.
+
+The dashboard shows elapsed ticks, surviving agents, and time until the death zone activates. Runs stop at the configured tick limit (5,000 by default); reset to start a new world.
+
+## Checks
+
+```bash
+npm run lint
+npm run build
+npm test
+```
+
+Regression tests cover combat elimination, alliance merging and countdowns, trait budgets, movement interpolation, tick limits, and store resets.
+
 ## Agents
 
 Two modes selectable in the config panel:
