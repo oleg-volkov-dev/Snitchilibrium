@@ -1,6 +1,6 @@
 .panel {
-  background: #1a2235;
-  border: 1px solid #2a3550;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -9,7 +9,7 @@
 .title {
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--muted);
   margin: 0 0 8px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -22,10 +22,14 @@
 }
 
 .row {
+  border: 0;
+  width: 100%;
+  background: transparent;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 7px;
+  padding: 8px 5px;
   border-radius: 5px;
   cursor: pointer;
   transition: background 0.12s;
@@ -43,7 +47,7 @@
 
 .rank {
   font-size: 10px;
-  color: #475569;
+  color: var(--muted);
   width: 20px;
   flex-shrink: 0;
 }
@@ -89,7 +93,7 @@
 
 .deadCount {
   font-size: 11px;
-  color: #475569;
+  color: var(--muted);
   text-align: center;
   padding-top: 6px;
   border-top: 1px solid #1e2d45;

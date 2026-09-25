@@ -10,9 +10,10 @@ export function WinnerBanner() {
   const story = useSimulationStore(s => s.simulation.story)
   const standoffSince = useSimulationStore(s => s.simulation.standoffSince)
   const tick = useSimulationStore(s => s.simulation.tick)
+  const maxTicks = useSimulationStore(s => s.simulation.config.maxTicks)
   const reset = useSimulationStore(s => s.reset)
 
-  const standoffActive = standoffSince > 0 && winners.length === 0 && !draw
+  const standoffActive = standoffSince > 0 && winners.length === 0 && !draw && tick < maxTicks
   const standoffRemaining = standoffActive
     ? Math.max(0, STANDOFF_TIMEOUT - (tick - standoffSince))
     : 0

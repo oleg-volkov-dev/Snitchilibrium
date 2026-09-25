@@ -1,26 +1,10 @@
 import { AgentTraits } from './types'
-import { clamp } from './utils'
+import { normalizeTraits as norm } from './traits'
 
 export interface AgentPreset {
   name: string
   description: string
   traits: AgentTraits
-}
-
-// Normalise raw trait values so they always sum to 3.5 — same budget as random agents.
-function norm(raw: AgentTraits): AgentTraits {
-  const sum = Object.values(raw).reduce((a, b) => a + b, 0)
-  const s = 3.5 / sum
-  return {
-    aggression:    clamp(raw.aggression    * s, 0, 1),
-    trust:         clamp(raw.trust         * s, 0, 1),
-    loyalty:       clamp(raw.loyalty       * s, 0, 1),
-    greed:         clamp(raw.greed         * s, 0, 1),
-    riskTolerance: clamp(raw.riskTolerance * s, 0, 1),
-    memory:        clamp(raw.memory        * s, 0, 1),
-    irrationality: clamp(raw.irrationality * s, 0, 1),
-    intellect:     clamp(raw.intellect     * s, 0, 1),
-  }
 }
 
 export const AGENT_PRESETS: AgentPreset[] = [

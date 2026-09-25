@@ -15,7 +15,10 @@ export function Leaderboard() {
       <h3 className={styles.title}>Leaderboard</h3>
       <div className={styles.list}>
         {ranked.map((agent, i) => (
-          <div
+          <button
+            type="button"
+            aria-pressed={agent.id === selectedId}
+            aria-label={`${agent.name}, ${agent.resources} resources, ${agent.health} health`}
             key={agent.id}
             className={`${styles.row} ${agent.id === selectedId ? styles.selected : ''}`}
             onClick={() => selectAgent(agent.id)}
@@ -33,7 +36,7 @@ export function Leaderboard() {
                 }}
               />
             </div>
-          </div>
+          </button>
         ))}
         {dead.length > 0 && (
           <div className={styles.deadCount}>{dead.length} eliminated</div>

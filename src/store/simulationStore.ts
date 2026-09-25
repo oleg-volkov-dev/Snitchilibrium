@@ -10,7 +10,7 @@ const DEFAULT_CONFIG: SimulationConfig = {
     resourceDensity: 0.005,
     obstacleDensity: 0.06,
     defaultTraits: {},
-    deathZoneStart: 1000,
+    deathZoneStart: 1500,
   },
   tickIntervalMs: 300,
   maxTicks: 5000,
@@ -40,11 +40,12 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   tickIntervalMs: DEFAULT_CONFIG.tickIntervalMs,
 
   setConfig: (config) => {
-    set({ config, simulation: createSimulation(config) })
+    set({ config, simulation: createSimulation(config), selectedAgentId: null, tickIntervalMs: config.tickIntervalMs })
   },
 
   start: () => {
-    set(s => ({ simulation: { ...s.simulation, running: true } }))
+    set(s => s.simulation.winners.length > 0 || s.simulation.draw || s.simulation.tick >= s.config.maxTicks
+      ? s : { simulation: { ...s.simulation, running: true } })
   },
 
   pause: () => {
@@ -70,6 +71,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
 
   randomize: () => {
     const { config } = get()
-    set({ simulation: createSimulation(config) })
+    set({ simulation: createSimulation(config), selectedAgentId: null })
   },
 }))

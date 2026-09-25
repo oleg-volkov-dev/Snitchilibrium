@@ -1,8 +1,10 @@
 .panel {
-  width: 272px;
+  width: 100%;
+  min-width: 0;
+  max-height: min(760px, calc(100vh - 140px));
   flex-shrink: 0;
-  background: #1a2235;
-  border: 1px solid #2a3550;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -11,7 +13,7 @@
 
 .tabs {
   display: flex;
-  border-bottom: 1px solid #2a3550;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -20,7 +22,7 @@
   padding: 9px 12px;
   background: none;
   border: none;
-  color: #475569;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -56,3 +58,5 @@
   overflow-y: auto;
   flex: 1;
 }
+
+@media (max-width: 1200px) { .panel { max-height: 400px; } }

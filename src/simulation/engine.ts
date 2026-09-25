@@ -10,6 +10,7 @@ import {
   createAgent,
   decideAction,
   getOrInitRelation,
+  getVisionRadius,
   modifyResentment,
   modifyTrust,
   randomizeTraits,
@@ -77,11 +78,12 @@ export function stepSimulation(state: SimulationState): SimulationState {
   const { agents, grid, tick } = state
 
   // Don't step if already over
-  if (state.winners.length > 0 || state.draw) return state
+  if (state.winners.length > 0 || state.draw || tick >= state.config.maxTicks) return state
 
   const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
   const newAgents = agents.map(a => ({
     ...a,
+    prevPosition: { ...a.position },
     relations: Object.fromEntries(
       Object.entries(a.relations).map(([k, v]) => [k, { ...v }])
     ),
@@ -106,11 +108,11 @@ export function stepSimulation(state: SimulationState): SimulationState {
     if (!agent.alive) continue
     updateRelations(agent)
     const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure, state.config.world.deathZoneStart)
-    applyAction(agent, action, agentById, newGrid, posMap, tick, newEvents)
+    applyAction(agent, action, agentById, newGrid, posMap, tick + 1, newEvents)
 
     // Memory scan: update agent's last known resource position after acting
     if (agent.alive) {
-      const scanRadius = Math.max(2, Math.round(agent.traits.memory * 12))
+      const scanRadius = getVisionRadius(agent.traits.memory)
       let bestDist = Infinity
       for (let dy = -scanRadius; dy <= scanRadius; dy++) {
         for (let dx = -scanRadius; dx <= scanRadius; dx++) {
@@ -131,7 +133,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
     }
   }
 
-  const maxResources = Math.max(8, state.config.world.agentCount * 2)
+  const maxResources = Math.max(8, agents.length * 2)
   spawnResources(newGrid, RESOURCE_SPAWN_RATE, maxResources)
 
   // Death zone: shrinking circle that damages agents outside the safe radius
@@ -199,8 +201,8 @@ export function stepSimulation(state: SimulationState): SimulationState {
 
     if (allMutuallyAllied) {
       if (state.standoffSince === 0) {
-        newStandoffSince = tick
-      } else if (tick - state.standoffSince >= STANDOFF_TIMEOUT) {
+        newStandoffSince = tick + 1
+      } else if (tick + 1 - state.standoffSince >= STANDOFF_TIMEOUT) {
         // Alliance wins together
         winners = stillAlive
       }
@@ -217,7 +219,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   return {
     ...state,
     tick: tick + 1,
-    running: isOver ? false : state.running,
+    running: isOver || tick + 1 >= state.config.maxTicks ? false : state.running,
     agents: newAgents,
     grid: newGrid,
     events: allEvents,
@@ -301,7 +303,7 @@ function applyAction(
       if (!action.targetPos) break
       const key = `${action.targetPos.x},${action.targetPos.y}`
       const destCell = grid[action.targetPos.y]?.[action.targetPos.x]
-      if (!posMap.has(key) && destCell?.type !== 'obstacle') {
+      if (!posMap.has(key) && destCell && destCell.type !== 'obstacle') {
         posMap.delete(`${agent.position.x},${agent.position.y}`)
         // Keep up to 3 recent positions to detect oscillation cycles
         agent.positionHistory = [{ ...agent.position }, ...agent.positionHistory].slice(0, 3)
@@ -361,15 +363,18 @@ function applyAction(
       log('attack', `${agent.name} attacked ${target.name} for ${damage} damage`, target.id)
 
       if (target.health <= 0) {
+        target.alive = false
+        posMap.delete(`${target.position.x},${target.position.y}`)
         const totalLoot = Math.floor(target.resources * 0.5)
         // Split loot evenly among attacker and all alive allies
         const allianceMembers = [agent, ...allLive.filter(
-          a => a.id !== agent.id && agent.relations[a.id]?.allied
+          a => a.alive && a.id !== agent.id && agent.relations[a.id]?.allied
         )]
         const share = Math.floor(totalLoot / allianceMembers.length)
         for (const member of allianceMembers) {
           member.resources += share
         }
+        agent.resources += totalLoot - share * allianceMembers.length
         const allianceDesc = allianceMembers.length > 1
           ? ` (split ${share} each with ${allianceMembers.slice(1).map(a => a.name).join(', ')})`
           : ''
@@ -402,19 +407,20 @@ function applyAction(
       const acceptChance = target.traits.trust * 0.85 + Math.max(0, targetRel.trust) * 0.2
 
       if (randomFloat() < acceptChance) {
-        // Find everyone already in the target's alliance group
+        // Merge both groups so every member shares the same protection and vision.
+        const sourceGroup = allianceGroupOf(agent.id, agentById)
         const targetGroup = allianceGroupOf(target.id, agentById)
-        // Connect agent to every member of the group (and vice versa)
-        for (const member of targetGroup) {
-          if (member.id === agent.id) continue
-          const r1 = getOrInitRelation(agent, member.id)
-          r1.allied = true
-          r1.allianceTick = tick
-          const r2 = getOrInitRelation(member, agent.id)
-          r2.allied = true
-          r2.allianceTick = tick
-          modifyTrust(agent, member.id, 0.25)
-          modifyTrust(member, agent.id, 0.25)
+        for (const source of sourceGroup) {
+          for (const member of targetGroup) {
+            if (member.id === source.id) continue
+            const r1 = getOrInitRelation(source, member.id)
+            const r2 = getOrInitRelation(member, source.id)
+            if (r1.allied && r2.allied) continue
+            r1.allied = r2.allied = true
+            r1.allianceTick = r2.allianceTick = tick
+            modifyTrust(source, member.id, 0.25)
+            modifyTrust(member, source.id, 0.25)
+          }
         }
         const groupNames = targetGroup.filter(m => m.id !== agent.id).map(m => m.name).join(', ')
         log('accept-alliance', `${target.name} accepted ${agent.name}'s alliance offer${targetGroup.length > 1 ? ` — ${agent.name} joins group: ${groupNames}` : ''}`, target.id)

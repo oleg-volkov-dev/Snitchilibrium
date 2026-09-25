@@ -31,7 +31,7 @@ export function EventLog() {
   return (
     <div className={styles.list}>
       {visible.length === 0 && (
-        <div className={styles.empty}>No events yet</div>
+        <div className={styles.empty}>The world is waiting. Start the simulation to follow alliances, conflict, and betrayal.</div>
       )}
       {visible.map((e, i) => (
         <EntryRow key={i} entry={e} />

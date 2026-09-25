@@ -1,6 +1,68 @@
+.arena {
+  overflow: hidden;
+  border: 1px solid #3a504d;
+  border-radius: 12px;
+  background: #10231d;
+  box-shadow: 0 12px 40px #0003, 0 0 0 4px #16251f44;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #142720;
+  border-bottom: 1px solid #31453c;
+}
+
+.toolbar > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 9px ui-monospace, monospace;
+  letter-spacing: .12em;
+  color: #b5cabb;
+}
+
+.toolbar i {
+  width: 5px;
+  height: 5px;
+  background: #9cf3d5;
+  border-radius: 50%;
+}
+
+.toolbar > div {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar button {
+  border: 1px solid #40594b;
+  background: #20372b;
+  border-radius: 5px;
+  color: #c8dccf;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.toolbar button:hover {
+  background: #2c4b3b;
+}
+
+.toolbar button[aria-pressed='true'] {
+  color: #b9f5d3;
+  border-color: #598a6b;
+}
+
+.viewport {
+  overflow: auto;
+  max-height: 75vh;
+}
+
 .canvas {
   display: block;
-  cursor: pointer;
-  border: 1px solid #374151;
-  border-radius: 4px;
+  height: auto;
+  cursor: crosshair;
 }

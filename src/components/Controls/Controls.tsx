@@ -9,6 +9,7 @@ export function Controls() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const stepFn = useSimulationStore(s => s.step)
   const running = simulation.running
+  const finished = simulation.winners.length > 0 || simulation.draw || simulation.tick >= simulation.config.maxTicks
 
   useEffect(() => {
     if (running) {
@@ -31,11 +32,12 @@ export function Controls() {
 
   return (
     <div className={styles.controls}>
+      <h3 className={styles.heading}>Simulation controls</h3>
       <div className={styles.row}>
-        <button className={styles.btn} onClick={running ? pause : start}>
-          {running ? 'Pause' : 'Start'}
+        <button className={`${styles.btn} ${styles.primary}`} onClick={running ? pause : start} disabled={finished}>
+          {running ? 'Ⅱ Pause' : '▶ Start'}
         </button>
-        <button className={styles.btn} onClick={step} disabled={running}>
+        <button className={styles.btn} onClick={step} disabled={running || finished}>
           Step
         </button>
         <button className={styles.btn} onClick={reset}>
@@ -51,6 +53,7 @@ export function Controls() {
           {speeds.map(s => (
             <button
               key={s.label}
+              aria-pressed={tickIntervalMs === s.ms}
               className={`${styles.btn} ${tickIntervalMs === s.ms ? styles.btnActive : ''}`}
               onClick={() => setSpeed(s.ms)}
             >
@@ -59,7 +62,7 @@ export function Controls() {
           ))}
         </div>
       </div>
-      <div className={styles.tick}>Tick: {simulation.tick}</div>
+      <div className={styles.tick}>{finished ? 'Run complete · reset to start again' : 'Reach 100 resources or outlast your rivals.'}</div>
     </div>
   )
 }

@@ -76,6 +76,8 @@ export function generateAgentName(index: number): string {
 const AGENT_COLORS = [
   '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7',
   '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+  '#38bdf8', '#e879f9', '#f8fafc', '#fda4af', '#facc15',
+  '#2dd4bf', '#c4b5fd', '#a3e635', '#fb923c', '#94a3b8',
 ]
 
 export function agentColor(index: number): string {

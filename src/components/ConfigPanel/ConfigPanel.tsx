@@ -9,7 +9,8 @@ export function ConfigPanel() {
   const [local, setLocal] = useState(config)
   const [open, setOpen] = useState(false)
 
-  function handleApply() {
+  function handleApply(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     setConfig(local)
     setOpen(false)
   }
@@ -27,23 +28,25 @@ export function ConfigPanel() {
 
   return (
     <div className={styles.wrapper}>
-      <button className={styles.toggle} onClick={() => setOpen(o => !o)}>
+      <button aria-expanded={open} className={styles.toggle} onClick={() => setOpen(o => !o)}>
         {open ? 'Hide Config' : 'Configure World'}
       </button>
       {open && (
-        <div className={styles.panel}>
+        <form className={styles.panel} onSubmit={handleApply}>
 
           {/* Agent mode */}
           <div className={styles.fieldColumn}>
             <label>Agents</label>
             <div className={styles.btnGroup}>
               <button
+                type="button"
                 className={`${styles.option} ${local.usePresetAgents ? styles.optionActive : ''}`}
                 onClick={() => setMode(true)}
               >
                 Preset ({AGENT_PRESETS.length})
               </button>
               <button
+                type="button"
                 className={`${styles.option} ${!local.usePresetAgents ? styles.optionActive : ''}`}
                 onClick={() => setMode(false)}
               >
@@ -63,6 +66,7 @@ export function ConfigPanel() {
                     const isActive = active.includes(p.name)
                     return (
                       <button
+                        type="button"
                         key={p.name}
                         title={p.description}
                         className={`${styles.presetChip} ${isActive ? styles.optionActive : ''}`}
@@ -86,9 +90,10 @@ export function ConfigPanel() {
           {/* Agent count — only relevant in random mode */}
           {!local.usePresetAgents && (
             <div className={styles.field}>
-              <label>Count</label>
-              <input
+              <label htmlFor="agent-count">Count</label>
+              <input id="agent-count"
                 type="number"
+                required
                 min={2}
                 max={20}
                 value={local.world.agentCount}
@@ -98,9 +103,10 @@ export function ConfigPanel() {
           )}
 
           <div className={styles.field}>
-            <label>Grid Width</label>
-            <input
+            <label htmlFor="grid-width">Grid Width</label>
+            <input id="grid-width"
               type="number"
+              required
               min={10}
               max={60}
               value={local.world.width}
@@ -108,9 +114,10 @@ export function ConfigPanel() {
             />
           </div>
           <div className={styles.field}>
-            <label>Grid Height</label>
-            <input
+            <label htmlFor="grid-height">Grid Height</label>
+            <input id="grid-height"
               type="number"
+              required
               min={10}
               max={40}
               value={local.world.height}
@@ -123,6 +130,7 @@ export function ConfigPanel() {
             <div className={styles.btnGroup}>
               {([['None', 0], ['Sparse', 0.005], ['Normal', 0.02], ['Rich', 0.05]] as const).map(([label, val]) => (
                 <button
+                  type="button"
                   key={label}
                   className={`${styles.option} ${local.world.resourceDensity === val ? styles.optionActive : ''}`}
                   onClick={() => updateWorld('resourceDensity', val)}
@@ -137,6 +145,7 @@ export function ConfigPanel() {
             <div className={styles.btnGroup}>
               {([['None', 0], ['Few', 0.05], ['Normal', 0.12], ['Dense', 0.22]] as const).map(([label, val]) => (
                 <button
+                  type="button"
                   key={label}
                   className={`${styles.option} ${local.world.obstacleDensity === val ? styles.optionActive : ''}`}
                   onClick={() => updateWorld('obstacleDensity', val)}
@@ -148,9 +157,10 @@ export function ConfigPanel() {
           </div>
 
           <div className={styles.field}>
-            <label>Death Zone Tick</label>
-            <input
+            <label htmlFor="death-zone">Death Zone Tick</label>
+            <input id="death-zone"
               type="number"
+              required
               min={100}
               max={5000}
               step={100}
@@ -159,10 +169,10 @@ export function ConfigPanel() {
             />
           </div>
 
-          <button className={styles.apply} onClick={handleApply}>
+          <button className={styles.apply} type="submit">
             Apply and Reset
           </button>
-        </div>
+        </form>
       )}
     </div>
   )
