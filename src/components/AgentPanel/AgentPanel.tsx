@@ -1,5 +1,6 @@
 import { useSimulationStore } from '../../store/simulationStore'
 import { AGENT_PRESETS } from '../../simulation/presets'
+import { agentArtwork } from '../agentArtwork'
 import styles from './AgentPanel.module.css'
 
 function TraitBar({ label, value }: { label: string; value: number }) {
@@ -28,6 +29,7 @@ export function AgentPanel() {
   }
 
   const preset = AGENT_PRESETS.find(p => p.name === agent.name)
+  const artwork = agentArtwork.get(agent.name)
 
   const allies = Object.entries(agent.relations)
     .filter(([, rel]) => rel.allied)
@@ -43,6 +45,11 @@ export function AgentPanel() {
 
   return (
     <div className={styles.panel}>
+      {artwork && (
+        <div className={styles.portrait}>
+          <img src={artwork} alt={`${agent.name} character`} />
+        </div>
+      )}
       <div className={styles.header}>
         <span className={styles.dot} style={{ background: agent.color }} />
         <span className={styles.name}>{agent.name}</span>

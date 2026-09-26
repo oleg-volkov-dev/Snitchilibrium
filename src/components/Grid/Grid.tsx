@@ -3,6 +3,7 @@ import { Cell, SimulationState } from '../../simulation/types'
 import { getVisionRadius } from '../../simulation/agent'
 import { getSafeRadius } from '../../simulation/utils'
 import { useSimulationStore } from '../../store/simulationStore'
+import { agentArtwork } from '../agentArtwork'
 import styles from './Grid.module.css'
 
 const CELL_SIZE = 26
@@ -160,7 +161,8 @@ function drawGrid(
   selectedAgentId: string | null,
   progress: number,
   terrain: HTMLCanvasElement,
-  showLabels: boolean
+  showLabels: boolean,
+  sprites: Map<string, HTMLImageElement>
 ) {
   const { grid, agents } = simulation
   const rows = grid.length
@@ -279,6 +281,8 @@ function drawGrid(
     const { cx, cy } = agentCenter(agent)
     const radius = CELL_SIZE * 0.36
     const isSelected = agent.id === selectedAgentId
+    const sprite = sprites.get(agent.name)
+    const hasSprite = sprite?.complete && sprite.naturalWidth > 0
     const healthFraction = agent.health / 100
     const healthColor = healthFraction > 0.5 ? '#4ade80' : healthFraction > 0.25 ? '#fbbf24' : '#f87171'
 
@@ -287,19 +291,21 @@ function drawGrid(
     ctx.ellipse(cx + 2, cy + 5, radius + 2, radius * .65, 0, 0, Math.PI * 2)
     ctx.fillStyle = 'rgba(0,0,0,.45)'
     ctx.fill()
-    // Glow
-    ctx.save()
-    ctx.shadowColor = agent.color
-    ctx.shadowBlur = isSelected ? 14 : 6
-    ctx.beginPath()
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-    const body = ctx.createRadialGradient(cx - 3, cy - 4, 0, cx, cy, radius * 1.4)
-    body.addColorStop(0, '#ecf5ff')
-    body.addColorStop(.3, agent.color)
-    body.addColorStop(1, '#111c2b')
-    ctx.fillStyle = body
-    ctx.fill()
-    ctx.restore()
+    // Keep colored tokens as the fallback for agents without artwork.
+    if (!hasSprite) {
+      ctx.save()
+      ctx.shadowColor = agent.color
+      ctx.shadowBlur = isSelected ? 14 : 6
+      ctx.beginPath()
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+      const body = ctx.createRadialGradient(cx - 3, cy - 4, 0, cx, cy, radius * 1.4)
+      body.addColorStop(0, '#ecf5ff')
+      body.addColorStop(.3, agent.color)
+      body.addColorStop(1, '#111c2b')
+      ctx.fillStyle = body
+      ctx.fill()
+      ctx.restore()
+    }
 
     // Health ring background
     ctx.beginPath()
@@ -324,14 +330,19 @@ function drawGrid(
       ctx.stroke()
     }
 
-    // Name initial
+    // Full character artwork, with the health and selection rings still visible.
+    if (hasSprite) {
+      const size = CELL_SIZE * 1.35
+      ctx.drawImage(sprite, cx - size / 2, cy - size / 2, size, size)
+    }
+
     ctx.fillStyle = 'rgba(255,255,255,0.92)'
     ctx.font = `600 ${Math.round(CELL_SIZE * 0.42)}px system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.shadowColor = '#000'
     ctx.shadowBlur = 3
-    ctx.fillText(agent.name[0], cx, cy + 0.5)
+    if (!hasSprite) ctx.fillText(agent.name[0], cx, cy + 0.5)
     ctx.shadowBlur = 0
 
     if (showLabels || isSelected) {
@@ -482,20 +493,31 @@ export function Grid() {
     let raf = 0
     let lastFrame = ''
     let lastSimulation: SimulationState | null = null
+    const sprites = new Map<string, HTMLImageElement>()
+    for (const [name, src] of agentArtwork) {
+      const sprite = new Image()
+      // A paused arena must repaint when its artwork finishes loading.
+      sprite.onload = () => { lastFrame = '' }
+      sprite.src = src
+      sprites.set(name, sprite)
+    }
     const render = () => {
       const elapsed = performance.now() - lastTickTimeRef.current
       const progress = reducedMotionRef.current ? 1 : Math.min(1, elapsed / Math.max(1, intervalRef.current))
       const frame = `${simRef.current.tick}/${selectedRef.current}/${labelsRef.current}/${progress}`
       if (frame !== lastFrame || lastSimulation !== simRef.current) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-        drawGrid(ctx, simRef.current, selectedRef.current, progress, terrain, labelsRef.current)
+        drawGrid(ctx, simRef.current, selectedRef.current, progress, terrain, labelsRef.current, sprites)
         lastFrame = frame
         lastSimulation = simRef.current
       }
       raf = requestAnimationFrame(render)
     }
     raf = requestAnimationFrame(render)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      for (const sprite of sprites.values()) sprite.onload = null
+    }
   }, [rows, cols, terrainKey])
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {

@@ -1,5 +1,6 @@
 import { useSimulationStore } from '../../store/simulationStore'
 import { getLeaderboard } from '../../simulation/engine'
+import { agentArtwork } from '../agentArtwork'
 import styles from './Leaderboard.module.css'
 
 export function Leaderboard() {
@@ -24,7 +25,13 @@ export function Leaderboard() {
             onClick={() => selectAgent(agent.id)}
           >
             <span className={styles.rank}>#{i + 1}</span>
-            <span className={styles.dot} style={{ background: agent.color }} />
+            <span className={styles.avatar}>
+              {agentArtwork.has(agent.name) ? (
+                <img src={agentArtwork.get(agent.name)} alt="" />
+              ) : (
+                <span className={styles.dot} style={{ background: agent.color }} />
+              )}
+            </span>
             <span className={styles.name}>{agent.name}</span>
             <span className={styles.resources}>{agent.resources}</span>
             <div className={styles.healthBar}>
