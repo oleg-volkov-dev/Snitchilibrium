@@ -148,7 +148,7 @@
   border: 1px solid var(--border);
   background: var(--panel);
   border-radius: 10px;
-  margin-bottom: 16px;
+  margin-top: 16px;
 }
 
 .metrics > div {

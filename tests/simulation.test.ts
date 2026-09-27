@@ -26,11 +26,15 @@ function assertBudget(traits: AgentTraits) {
   assert.ok(Math.abs(values.reduce((sum, value) => sum + value, 0) - 3.5) < 1e-10)
 }
 
-test('the death zone defaults to tick 800', () => {
-  assert.equal(DEATH_ZONE_START, 800)
-  assert.equal(useSimulationStore.getState().config.world.deathZoneStart, 800)
-  assert.equal(getSafeRadius(799, 40, 30), Infinity)
-  assert.ok(Number.isFinite(getSafeRadius(800, 40, 30)))
+test('world defaults use a 35 by 20 map, sparse grass, and death-zone tick 300', () => {
+  const world = useSimulationStore.getState().config.world
+  assert.equal(world.width, 35)
+  assert.equal(world.height, 20)
+  assert.equal(world.grassDensity, .02)
+  assert.equal(DEATH_ZONE_START, 300)
+  assert.equal(world.deathZoneStart, 300)
+  assert.equal(getSafeRadius(299, 35, 20), Infinity)
+  assert.ok(Number.isFinite(getSafeRadius(300, 35, 20)))
 })
 
 test('grass is passable cover and resource spawning preserves it', () => {

@@ -42,12 +42,12 @@ export function App() {
             <div><p className={styles.eyebrow}>THE EXPERIMENT</p><h2>The arena</h2></div>
             <span className={styles.mapSize}>{config.world.width} × {config.world.height} world</span>
           </div>
+          <Grid />
           <div className={styles.metrics}>
             <div><span>Elapsed ticks</span><strong>{tick.toLocaleString()}<small> / {config.maxTicks.toLocaleString()}</small></strong></div>
             <div><span>Agents alive</span><strong>{alive}<small> / {agents.length}</small></strong></div>
             <div><span>Death zone</span><strong className={tick >= config.world.deathZoneStart ? styles.danger : ''}>{tick >= config.world.deathZoneStart ? 'Closing in' : (config.world.deathZoneStart - tick).toLocaleString()}<small>{tick < config.world.deathZoneStart ? ' ticks away' : ''}</small></strong></div>
           </div>
-          <Grid />
           <div className={styles.arenaFooter}>
             <div className={styles.legend}><span><i className={styles.agentKey} />Agent</span><span><i className={styles.resourceKey} />Resource</span><span><i className={styles.rockKey} />Obstacle</span><span><i className={styles.allianceKey} />Alliance</span></div>
             <p>Select an agent to inspect traits and shared vision.</p>

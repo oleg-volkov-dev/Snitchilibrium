@@ -70,10 +70,10 @@ Every agent — preset or random — has the same total trait budget, so no arch
 
 All options are available in the Configure World panel:
 
-- Grid width and height (default 40×30)
+- Grid width and height (default 35×20)
 - Agent mode (preset / random) and active archetypes
-- Resource and obstacle density
-- Death Zone start tick — lower values create earlier pressure (default 1500)
+- Resource and obstacle density (grass covers 2% of tiles by default)
+- Death Zone start tick — lower values create earlier pressure (default 300)
 
 ## Winning
 

@@ -5,13 +5,13 @@ import { DEATH_ZONE_START } from '../simulation/utils'
 
 const DEFAULT_CONFIG: SimulationConfig = {
   world: {
-    width: 40,
-    height: 30,
+    width: 35,
+    height: 20,
     agentCount: 10,
     resourceDensity: 0.005,
     obstacleDensity: 0.06,
     defaultTraits: {},
-    grassDensity: 0.06,
+    grassDensity: 0.02,
     deathZoneStart: DEATH_ZONE_START,
   },
   tickIntervalMs: 300,

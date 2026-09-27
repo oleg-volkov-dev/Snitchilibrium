@@ -143,9 +143,8 @@ function drawGrid(
     const radius = CELL_SIZE * 0.36
     const isSelected = agent.id === selectedAgentId
     const hidden = isHidden(agent, grid, simulation.tick)
-    if (hidden && !isSelected) continue
     ctx.save()
-    if (hidden) ctx.globalAlpha = .4
+    if (hidden) ctx.globalAlpha = .45
     const sprite = sprites.get(agent.name)
     const hasSprite = sprite?.complete && sprite.naturalWidth > 0
     const healthFraction = agent.health / 100
@@ -211,6 +210,7 @@ function drawGrid(
     ctx.shadowBlur = 0
 
     if (showLabels || isSelected) {
+      ctx.globalAlpha = 1
       ctx.font = `${isSelected ? 600 : 500} 10px system-ui, sans-serif`
       const label = hidden ? `${agent.name} · hiding ${agent.hiddenUntil - simulation.tick}t` : agent.name
       const labelWidth = ctx.measureText(label).width + 12
@@ -407,7 +407,6 @@ export function Grid() {
     const progress = reducedMotionRef.current ? 1 : Math.min(1, (performance.now() - lastTickTimeRef.current) / Math.max(1, tickIntervalMs))
     const t = ease(progress)
     const clicked = simulation.agents.find(a => {
-      if (isHidden(a, simulation.grid, simulation.tick) && a.id !== selectedAgentId) return false
       const ax = a.prevPosition.x + (a.position.x - a.prevPosition.x) * t + .5
       const ay = a.prevPosition.y + (a.position.y - a.prevPosition.y) * t + .5
       return a.alive && Math.hypot(ax - x, ay - y) <= .65
@@ -434,7 +433,7 @@ export function Grid() {
           role="img"
         />
       </div>
-      <div className={styles.legend}>Grass conceals agents for up to 30 ticks. Select a hidden agent in the leaderboard to inspect it.</div>
+      <div className={styles.legend}>Faded agents are hiding in grass for up to 30 ticks. They remain visible to you, but concealed from other agents.</div>
     </div>
   )
 }

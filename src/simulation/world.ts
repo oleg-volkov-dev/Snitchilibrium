@@ -2,7 +2,7 @@ import { Cell, CellType, Position, WorldConfig } from './types'
 import { randomFloat } from './utils'
 
 export function createGrid(config: WorldConfig): Cell[][] {
-  const { width, height, resourceDensity, obstacleDensity, grassDensity = 0.06 } = config
+  const { width, height, resourceDensity, obstacleDensity, grassDensity = 0.02 } = config
   const grid: Cell[][] = Array.from({ length: height }, () =>
     Array.from({ length: width }, () => ({ type: 'empty' as CellType }))
   )

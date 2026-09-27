@@ -70,7 +70,7 @@ export interface WorldConfig {
   agentCount: number
   resourceDensity: number  // 0-1
   obstacleDensity: number  // 0-1
-  grassDensity?: number   // 0-1; defaults to 0.06
+  grassDensity?: number   // 0-1; defaults to 0.02
   defaultTraits: Partial<AgentTraits>
   deathZoneStart: number   // tick when the death zone begins shrinking
 }
