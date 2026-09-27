@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Cell, SimulationState } from '../../simulation/types'
+import { SimulationState } from '../../simulation/types'
 import { getVisionRadius } from '../../simulation/agent'
 import { getSafeRadius } from '../../simulation/utils'
 import { useSimulationStore } from '../../store/simulationStore'
 import { agentArtwork } from '../agentArtwork'
+import { isHidden } from '../../simulation/concealment'
+import rockArtwork from '../../../designs/Rock.png'
+import coinArtwork from '../../../designs/Gold.png'
+import grassArtwork from '../../../designs/Grass.png'
 import styles from './Grid.module.css'
 
 const CELL_SIZE = 26
@@ -13,146 +17,16 @@ function ease(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
 
-// Deterministic pseudo-random [0,1] keyed to a grid cell + seed index.
-// Same cell always produces the same value so rocks look stable across frames.
-function cellRng(gx: number, gy: number, seed: number): number {
-  const s = Math.sin(gx * 127.1 + gy * 311.7 + seed * 74.3)
-  return s - Math.floor(s)
-}
+const terrainArtwork = new Map([
+  ['obstacle', rockArtwork],
+  ['resource', coinArtwork],
+  ['grass', grassArtwork],
+])
 
-// Stable terrain texture with subtle tile seams and scattered grass.
-function drawGroundCell(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const shade = 13 + cellRng(x, y, 30) * 3
-  ctx.fillStyle = `hsl(158, 23%, ${shade}%)`
-  ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-  ctx.strokeStyle = 'rgba(147, 197, 174, .045)'
-  ctx.lineWidth = .5
-  ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-  if (cellRng(x, y, 31) > .65) {
-    const px = x * CELL_SIZE + cellRng(x, y, 32) * 20 + 3
-    const py = y * CELL_SIZE + cellRng(x, y, 33) * 20 + 3
-    ctx.strokeStyle = 'rgba(124, 175, 128, .18)'
-    ctx.beginPath()
-    ctx.moveTo(px - 2, py - 3); ctx.lineTo(px, py); ctx.lineTo(px + 1, py - 4)
-    ctx.stroke()
-  }
-}
-
-// Procedural rock boulder: organic polygon, lit from top-left, with crack detail.
-function drawRock(ctx: CanvasRenderingContext2D, gx: number, gy: number) {
-  const cx = gx * CELL_SIZE + CELL_SIZE / 2
-  const cy = gy * CELL_SIZE + CELL_SIZE / 2
-  const rng = (n: number) => cellRng(gx, gy, n)
-  const nPts = 10
-  const baseR = CELL_SIZE * 0.43
-
-  // Pre-generate organic outline — large radius variance makes rocks look natural
-  const pts: [number, number][] = []
-  for (let i = 0; i < nPts; i++) {
-    const ang = (i / nPts) * Math.PI * 2 - Math.PI / 2
-    const r = baseR * (0.55 + rng(i) * 0.45)   // variance 0.55–1.0 × baseR
-    pts.push([Math.cos(ang) * r, Math.sin(ang) * r])
-  }
-
-  // Helper: trace the rock outline with an optional offset for the shadow
-  const trace = (ox: number, oy: number) => {
-    ctx.beginPath()
-    ctx.moveTo(cx + pts[0][0] + ox, cy + pts[0][1] + oy)
-    for (let i = 1; i < nPts; i++) ctx.lineTo(cx + pts[i][0] + ox, cy + pts[i][1] + oy)
-    ctx.closePath()
-  }
-
-  // Drop shadow (offset copy of the polygon)
-  trace(2.5, 3.5)
-  ctx.fillStyle = 'rgba(0,0,0,0.48)'
-  ctx.fill()
-
-  // Rock body — warm grey-brown, lit from upper-left
-  trace(0, 0)
-  const hue = 28 + rng(9) * 24       // earthy brown-grey
-  const sat = 6 + rng(10) * 10
-  const hlx = cx - baseR * 0.28
-  const hly = cy - baseR * 0.33
-  const grad = ctx.createRadialGradient(hlx, hly, 0, cx + baseR * 0.15, cy + baseR * 0.2, baseR * 1.2)
-  grad.addColorStop(0,    `hsl(${hue},${sat}%,${62 + rng(11) * 10}%)`)   // bright highlight
-  grad.addColorStop(0.38, `hsl(${hue},${sat}%,${36 + rng(12) * 8}%)`)   // mid-tone
-  grad.addColorStop(1,    `hsl(${hue},${sat}%,${15 + rng(13) * 6}%)`)   // dark shadow edge
-  ctx.fillStyle = grad
-  ctx.fill()
-
-  // Outline — slightly darker than the dark edge
-  ctx.strokeStyle = `hsl(${hue},${sat}%,10%)`
-  ctx.lineWidth = 0.9
-  ctx.stroke()
-
-  // Specular highlight dot at top-left
-  ctx.beginPath()
-  ctx.arc(hlx + baseR * 0.1, hly + baseR * 0.12, baseR * 0.13, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(255,255,255,${0.22 + rng(14) * 0.14})`
-  ctx.fill()
-
-  // Crack detail — present on ~65 % of rocks
-  if (rng(15) > 0.35) {
-    const x1 = cx + (rng(16) - 0.5) * baseR * 0.8
-    const y1 = cy + (rng(17) - 0.5) * baseR * 0.55
-    ctx.beginPath()
-    ctx.moveTo(x1, y1)
-    ctx.lineTo(x1 + (rng(18) - 0.5) * baseR * 0.65, y1 + rng(19) * baseR * 0.45)
-    ctx.strokeStyle = `rgba(0,0,0,${0.32 + rng(20) * 0.26})`
-    ctx.lineWidth = 0.8
-    ctx.stroke()
-  }
-}
-
-// Gold coin resource: flat yellow disc with rim, inner ring, and cross impression.
-function drawResource(ctx: CanvasRenderingContext2D, x: number, y: number, cell: Cell) {
-  const cx = x * CELL_SIZE + CELL_SIZE / 2
-  const cy = y * CELL_SIZE + CELL_SIZE / 2
-  const intensity = Math.min(1, (cell.resourceAmount ?? 0) / 20)
-  const r = CELL_SIZE * (0.17 + 0.14 * intensity)
-
-  // Soft yellow glow halo
-  const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2.6)
-  halo.addColorStop(0,   `rgba(253,224,71,${0.36 + intensity * 0.28})`)
-  halo.addColorStop(0.5, `rgba(234,179,8,${0.12 + intensity * 0.10})`)
-  halo.addColorStop(1,   'rgba(234,179,8,0)')
-  ctx.fillStyle = halo
-  ctx.beginPath()
-  ctx.arc(cx, cy, r * 2.6, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Coin face — linear top-to-bottom gradient so it reads flat, not spherical
-  const coinGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r)
-  coinGrad.addColorStop(0,   '#fef08a')   // light yellow top
-  coinGrad.addColorStop(0.45, '#fde047')  // bright yellow mid
-  coinGrad.addColorStop(1,   '#ca8a04')   // darker gold bottom edge
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fillStyle = coinGrad
-  ctx.fill()
-
-  // Thick rim — the key detail that reads as a coin edge
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = '#a16207'
-  ctx.lineWidth = 1.6
-  ctx.stroke()
-
-  // Inner engraved ring
-  ctx.beginPath()
-  ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(133,77,14,0.50)'
-  ctx.lineWidth = 0.7
-  ctx.stroke()
-
-  // Cross impression on coin face
-  const ir = r * 0.42
-  ctx.strokeStyle = 'rgba(133,77,14,0.35)'
-  ctx.lineWidth = 0.6
-  ctx.beginPath()
-  ctx.moveTo(cx - ir, cy); ctx.lineTo(cx + ir, cy)
-  ctx.moveTo(cx, cy - ir); ctx.lineTo(cx, cy + ir)
-  ctx.stroke()
+function drawTileArtwork(ctx: CanvasRenderingContext2D, sprite: HTMLImageElement | undefined, x: number, y: number, scale = 1.2) {
+  if (!sprite?.complete || !sprite.naturalWidth) return
+  const size = CELL_SIZE * scale
+  ctx.drawImage(sprite, (x + .5) * CELL_SIZE - size / 2, (y + .5) * CELL_SIZE - size / 2, size, size)
 }
 
 function drawGrid(
@@ -162,7 +36,8 @@ function drawGrid(
   progress: number,
   terrain: HTMLCanvasElement,
   showLabels: boolean,
-  sprites: Map<string, HTMLImageElement>
+  sprites: Map<string, HTMLImageElement>,
+  terrainSprites: Map<string, HTMLImageElement>
 ) {
   const { grid, agents } = simulation
   const rows = grid.length
@@ -175,28 +50,14 @@ function drawGrid(
 
   ctx.drawImage(terrain, 0, 0, W, H)
 
-  // Resources — diamond gems with glow halos
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      if (grid[y][x].type === 'resource') drawResource(ctx, x, y, grid[y][x])
+      const cell = grid[y][x]
+      if (cell.type === 'resource') {
+        const scale = .85 + Math.min(1, (cell.resourceAmount ?? 0) / 20) * .3
+        drawTileArtwork(ctx, terrainSprites.get('resource'), x, y, scale)
+      }
     }
-  }
-
-  // Arena vignette: darken the map edges to frame the battlefield
-  const vign = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.72)
-  vign.addColorStop(0, 'rgba(0,0,0,0)')
-  vign.addColorStop(1, 'rgba(0,0,0,0.52)')
-  ctx.fillStyle = vign
-  ctx.fillRect(0, 0, W, H)
-
-  // Grid lines — kept faint for readability
-  ctx.strokeStyle = 'rgba(255,255,255,0.022)'
-  ctx.lineWidth = 0.5
-  for (let x = 0; x <= cols; x++) {
-    ctx.beginPath(); ctx.moveTo(x * CELL_SIZE, 0); ctx.lineTo(x * CELL_SIZE, H); ctx.stroke()
-  }
-  for (let y = 0; y <= rows; y++) {
-    ctx.beginPath(); ctx.moveTo(0, y * CELL_SIZE); ctx.lineTo(W, y * CELL_SIZE); ctx.stroke()
   }
 
   // Interpolated agent center helper
@@ -209,14 +70,14 @@ function drawGrid(
   // Alliance lines (use interpolated positions)
   const drawn = new Set<string>()
   for (const agent of agents) {
-    if (!agent.alive) continue
+    if (!agent.alive || isHidden(agent, grid, simulation.tick)) continue
     for (const [targetId, rel] of Object.entries(agent.relations)) {
       if (!rel.allied) continue
       const key = [agent.id, targetId].sort().join('|')
       if (drawn.has(key)) continue
       drawn.add(key)
       const target = agents.find(a => a.id === targetId)
-      if (!target?.alive) continue
+      if (!target?.alive || isHidden(target, grid, simulation.tick)) continue
       const a = agentCenter(agent)
       const b = agentCenter(target)
       ctx.save()
@@ -268,7 +129,7 @@ function drawGrid(
 
     // Draw ally circles first (behind), then own circle on top
     for (const a of agents) {
-      if (a.alive && a.id !== selectedAgent.id && selectedAgent.relations[a.id]?.allied) {
+      if (a.alive && !isHidden(a, grid, simulation.tick) && a.id !== selectedAgent.id && selectedAgent.relations[a.id]?.allied) {
         drawVisionCircle(a, false)
       }
     }
@@ -281,6 +142,10 @@ function drawGrid(
     const { cx, cy } = agentCenter(agent)
     const radius = CELL_SIZE * 0.36
     const isSelected = agent.id === selectedAgentId
+    const hidden = isHidden(agent, grid, simulation.tick)
+    if (hidden && !isSelected) continue
+    ctx.save()
+    if (hidden) ctx.globalAlpha = .4
     const sprite = sprites.get(agent.name)
     const hasSprite = sprite?.complete && sprite.naturalWidth > 0
     const healthFraction = agent.health / 100
@@ -347,15 +212,16 @@ function drawGrid(
 
     if (showLabels || isSelected) {
       ctx.font = `${isSelected ? 600 : 500} 10px system-ui, sans-serif`
-      const labelWidth = ctx.measureText(agent.name).width + 12
+      const label = hidden ? `${agent.name} · hiding ${agent.hiddenUntil - simulation.tick}t` : agent.name
+      const labelWidth = ctx.measureText(label).width + 12
       const labelX = Math.max(2, Math.min(W - labelWidth - 2, cx - labelWidth / 2))
       const labelY = cy > 30 ? cy - 30 : cy + 18
       ctx.fillStyle = isSelected ? '#d8f9ed' : 'rgba(8,18,24,.88)'
       ctx.fillRect(labelX, labelY, labelWidth, 15)
       ctx.fillStyle = isSelected ? '#132b24' : '#dce8e3'
-      ctx.fillText(agent.name, labelX + labelWidth / 2, labelY + 7.5)
+      ctx.fillText(label, labelX + labelWidth / 2, labelY + 7.5)
     }
-
+    ctx.restore()
   }
 
   // Brief action traces make combat readable at normal and slow speeds.
@@ -364,6 +230,7 @@ function drawGrid(
       const source = agents.find(a => a.id === event.agentId)
       const target = agents.find(a => a.id === event.targetId)
       if (!source || !target) continue
+      if (isHidden(source, grid, simulation.tick) || isHidden(target, grid, simulation.tick)) continue
       const from = agentCenter(source)
       const to = agentCenter(target)
       ctx.save()
@@ -442,7 +309,7 @@ export function Grid() {
   const [zoomed, setZoomed] = useState(false)
   const rows = simulation.grid.length
   const cols = simulation.grid[0]?.length ?? 0
-  const terrainKey = useMemo(() => simulation.grid.map(row => row.map(cell => cell.type === 'obstacle' ? '1' : '0').join('')).join('|'), [simulation.grid])
+  const terrainKey = useMemo(() => simulation.grid.map(row => row.map(cell => cell.type === 'obstacle' ? 'R' : cell.type === 'grass' ? 'G' : '.').join('')).join('|'), [simulation.grid])
 
   const simRef = useRef(simulation)
   const selectedRef = useRef(selectedAgentId)
@@ -482,17 +349,29 @@ export function Grid() {
     const ground = terrain.getContext('2d')
     if (!ground) return
     ground.scale(dpr, dpr)
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) drawGroundCell(ground, x, y)
-    }
-    const rocks = terrainKey.split('|')
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) if (rocks[y][x] === '1') drawRock(ground, x, y)
-    }
-
     let raf = 0
     let lastFrame = ''
     let lastSimulation: SimulationState | null = null
+    const terrainSprites = new Map<string, HTMLImageElement>()
+    const tiles = terrainKey.split('|')
+    const paintTerrain = () => {
+      ground.fillStyle = '#163326'
+      ground.fillRect(0, 0, logicalW, logicalH)
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const type = tiles[y][x] === 'R' ? 'obstacle' : tiles[y][x] === 'G' ? 'grass' : ''
+          if (type) drawTileArtwork(ground, terrainSprites.get(type), x, y)
+        }
+      }
+      lastFrame = ''
+    }
+    for (const [type, src] of terrainArtwork) {
+      const sprite = new Image()
+      sprite.onload = paintTerrain
+      terrainSprites.set(type, sprite)
+      sprite.src = src
+    }
+    paintTerrain()
     const sprites = new Map<string, HTMLImageElement>()
     for (const [name, src] of agentArtwork) {
       const sprite = new Image()
@@ -507,7 +386,7 @@ export function Grid() {
       const frame = `${simRef.current.tick}/${selectedRef.current}/${labelsRef.current}/${progress}`
       if (frame !== lastFrame || lastSimulation !== simRef.current) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-        drawGrid(ctx, simRef.current, selectedRef.current, progress, terrain, labelsRef.current, sprites)
+        drawGrid(ctx, simRef.current, selectedRef.current, progress, terrain, labelsRef.current, sprites, terrainSprites)
         lastFrame = frame
         lastSimulation = simRef.current
       }
@@ -516,7 +395,7 @@ export function Grid() {
     raf = requestAnimationFrame(render)
     return () => {
       cancelAnimationFrame(raf)
-      for (const sprite of sprites.values()) sprite.onload = null
+      for (const sprite of [...sprites.values(), ...terrainSprites.values()]) sprite.onload = null
     }
   }, [rows, cols, terrainKey])
 
@@ -528,6 +407,7 @@ export function Grid() {
     const progress = reducedMotionRef.current ? 1 : Math.min(1, (performance.now() - lastTickTimeRef.current) / Math.max(1, tickIntervalMs))
     const t = ease(progress)
     const clicked = simulation.agents.find(a => {
+      if (isHidden(a, simulation.grid, simulation.tick) && a.id !== selectedAgentId) return false
       const ax = a.prevPosition.x + (a.position.x - a.prevPosition.x) * t + .5
       const ay = a.prevPosition.y + (a.position.y - a.prevPosition.y) * t + .5
       return a.alive && Math.hypot(ax - x, ay - y) <= .65
@@ -554,6 +434,7 @@ export function Grid() {
           role="img"
         />
       </div>
+      <div className={styles.legend}>Grass conceals agents for up to 30 ticks. Select a hidden agent in the leaderboard to inspect it.</div>
     </div>
   )
 }

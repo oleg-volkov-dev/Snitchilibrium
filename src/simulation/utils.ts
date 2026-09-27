@@ -1,7 +1,7 @@
 import { Position } from './types'
 
 // Death zone constants — exported so engine and renderer share the same math
-export const DEATH_ZONE_START = 1500       // tick when zone begins shrinking
+export const DEATH_ZONE_START = 800        // tick when zone begins shrinking
 export const DEATH_ZONE_DAMAGE = 3         // HP lost per tick while outside
 
 /** Safe-zone radius in grid tiles. Returns Infinity before zone activates. */

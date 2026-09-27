@@ -7,6 +7,7 @@ import {
   RelationEntry,
 } from './types'
 import { normalizeTraits } from './traits'
+import { isHidden } from './concealment'
 import { adjacentPositions, clamp, distance, randomFloat, shuffle, getSafeRadius, DEATH_ZONE_START } from './utils'
 
 const DEFAULT_TRAITS: AgentTraits = {
@@ -49,6 +50,8 @@ export function createAgent(
     traits: { ...DEFAULT_TRAITS, ...traitOverrides },
     relations: {},
     color,
+    hiddenUntil: 0,
+    hideAvailableAt: 0,
   }
 }
 
@@ -84,7 +87,7 @@ export function decideAction(
     (Math.random() - 0.5) * traits.irrationality * 2 * (1 - traits.intellect * 0.7)
 
   // Irrationality: highly irrational agents occasionally act randomly
-  if (Math.random() < traits.irrationality * 0.12) {
+  if (!isHidden(agent, grid, tick) && Math.random() < traits.irrationality * 0.12) {
     const freeAdj = adjacentPositions(agent.position, width, height).filter(
       p => grid[p.y][p.x].type !== 'obstacle'
     )
@@ -100,8 +103,9 @@ export function decideAction(
 
   // Vision radius (memory-driven, compressed to [3, 6])
   const visionRadius = getVisionRadius(traits.memory)
-  const allyAgents = liveOthers.filter(a => agent.relations[a.id]?.allied)
-  const nearbyOthers = liveOthers.filter(a => {
+  const visibleOthers = liveOthers.filter(a => !isHidden(a, grid, tick))
+  const allyAgents = visibleOthers.filter(a => agent.relations[a.id]?.allied)
+  const nearbyOthers = visibleOthers.filter(a => {
     if (distance(a.position, agent.position) <= visionRadius) return true
     return allyAgents.some(ally => distance(a.position, ally.position) <= getVisionRadius(ally.traits.memory))
   })
@@ -128,7 +132,7 @@ export function decideAction(
   })
 
   // --- Betrayal ---
-  const betrayalCandidates = liveOthers.filter(a => {
+  const betrayalCandidates = visibleOthers.filter(a => {
     const rel = agent.relations[a.id]
     if (!rel?.allied) return false
     const allianceAge = tick - rel.allianceTick
@@ -187,7 +191,7 @@ export function decideAction(
 
   // --- Support ally ---
   const alliesUnderAttack = nearbyAllies.filter(ally => {
-    const allyEnemiesAdj = liveOthers.filter(
+    const allyEnemiesAdj = nearbyEnemies.filter(
       e => !ally.relations[e.id]?.allied && distance(e.position, ally.position) === 1
     )
     return allyEnemiesAdj.length > 0 && distance(ally.position, agent.position) <= 6
@@ -220,6 +224,14 @@ export function decideAction(
     (agent.position.x - dzCx) ** 2 + (agent.position.y - dzCy) ** 2
   )
   const inDeathZone = dzRadius !== Infinity && dzDistFromCenter > dzRadius
+  // Concealment is a defensive pause, never a way to attack unseen or tank the zone.
+  if (isHidden(agent, grid, tick)) {
+    if (inDeathZone) {
+      return { type: 'move', targetPos: findDeathZoneFleeTarget(agent, grid, occupied, width, height) }
+    }
+    if (canHeal) return { type: 'heal' }
+    if (nearestThreat && distance(nearestThreat.position, agent.position) <= 3) return { type: 'idle' }
+  }
   // Very greedy agents near the win threshold may sacrifice HP to collect zone resources.
   // They suppress the normal flee-the-zone behaviour unless health drops critically low.
   const greedyDash = traits.greed > 0.7 && resourceProgress > 0.6
@@ -266,7 +278,10 @@ export function decideAction(
   }
 
   if (best === fleeUtility && nearestThreat) {
-    return { type: 'move', targetPos: findFleeTarget(agent, nearestThreat.position, grid, occupied, width, height) }
+    const cover = tick >= agent.hideAvailableAt
+      ? findGrassEscape(agent, grid, occupied, dzRadius)
+      : undefined
+    return { type: 'move', targetPos: cover ?? findFleeTarget(agent, nearestThreat.position, grid, occupied, width, height) }
   }
 
   if (best === gatherUtility && resourceAdj) {
@@ -314,7 +329,28 @@ export function decideAction(
     return { type: 'offer-alliance', targetId: potentialAllies[0].id }
   }
 
-  return { type: 'move', targetPos: findMoveTarget(agent, grid, liveOthers, allyAgents, occupied, width, height, resourceProgress, dzRadius, greedyDash) }
+  return { type: 'move', targetPos: findMoveTarget(agent, grid, nearbyOthers, allyAgents, occupied, width, height, resourceProgress, dzRadius, greedyDash) }
+}
+
+// Search reachable cover within personal vision; remember the first step of each path.
+function findGrassEscape(agent: AgentState, grid: Cell[][], occupied: Set<string>, safeRadius: number): Position | undefined {
+  const width = grid[0].length
+  const height = grid.length
+  const radius = getVisionRadius(agent.traits.memory)
+  const queue = [{ pos: agent.position, first: agent.position, steps: 0 }]
+  const visited = new Set([`${agent.position.x},${agent.position.y}`])
+  for (let i = 0; i < queue.length; i++) {
+    const { pos, first, steps } = queue[i]
+    if (steps > 0 && grid[pos.y][pos.x].type === 'grass') return first
+    if (steps >= radius) continue
+    for (const next of adjacentPositions(pos, width, height)) {
+      const key = `${next.x},${next.y}`
+      if (visited.has(key) || occupied.has(key) || grid[next.y][next.x].type === 'obstacle') continue
+      if (Math.hypot(next.x - (width - 1) / 2, next.y - (height - 1) / 2) > safeRadius) continue
+      visited.add(key)
+      queue.push({ pos: next, first: steps === 0 ? next : first, steps: steps + 1 })
+    }
+  }
 }
 
 function findDeathZoneFleeTarget(

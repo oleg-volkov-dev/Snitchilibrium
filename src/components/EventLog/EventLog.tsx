@@ -6,6 +6,7 @@ const ACTION_COLORS: Record<string, string> = {
   'attack': '#ef4444',
   'betray-ally': '#f97316',
   'gather': '#22c55e',
+  'hide': '#a3c96b',
   'accept-alliance': '#fbbf24',
   'reject-alliance': '#6b7280',
   'move': '#4b5563',

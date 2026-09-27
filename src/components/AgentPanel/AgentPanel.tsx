@@ -1,6 +1,7 @@
 import { useSimulationStore } from '../../store/simulationStore'
 import { AGENT_PRESETS } from '../../simulation/presets'
 import { agentArtwork } from '../agentArtwork'
+import { isHidden } from '../../simulation/concealment'
 import styles from './AgentPanel.module.css'
 
 function TraitBar({ label, value }: { label: string; value: number }) {
@@ -18,6 +19,8 @@ function TraitBar({ label, value }: { label: string; value: number }) {
 export function AgentPanel() {
   const selectedId = useSimulationStore(s => s.selectedAgentId)
   const agents = useSimulationStore(s => s.simulation.agents)
+  const grid = useSimulationStore(s => s.simulation.grid)
+  const tick = useSimulationStore(s => s.simulation.tick)
   const agent = agents.find(a => a.id === selectedId)
 
   if (!agent) {
@@ -56,6 +59,9 @@ export function AgentPanel() {
         {!agent.alive && <span className={styles.dead}>eliminated</span>}
       </div>
       {preset && <div className={styles.archetype}>{preset.description}</div>}
+      {isHidden(agent, grid, tick) && (
+        <div className={styles.concealment}>Hidden in grass · {agent.hiddenUntil - tick} ticks left</div>
+      )}
 
       <div className={styles.stats}>
         <div className={styles.stat}>

@@ -66,3 +66,11 @@
   height: auto;
   cursor: crosshair;
 }
+
+.legend {
+  padding: 8px 12px;
+  border-top: 1px solid #31453c;
+  color: #b5cabb;
+  font-size: 11px;
+  line-height: 1.5;
+}

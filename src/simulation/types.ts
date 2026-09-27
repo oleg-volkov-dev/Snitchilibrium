@@ -1,6 +1,6 @@
 export type Position = { x: number; y: number }
 
-export type CellType = 'empty' | 'obstacle' | 'resource'
+export type CellType = 'empty' | 'obstacle' | 'resource' | 'grass'
 
 export interface Cell {
   type: CellType
@@ -19,6 +19,7 @@ export type ActionType =
   | 'support-ally'
   | 'betray-ally'
   | 'idle'
+  | 'hide'
 
 export interface AgentAction {
   type: ActionType
@@ -58,6 +59,8 @@ export interface AgentState {
   traits: AgentTraits
   relations: Record<string, RelationEntry>
   color: string
+  hiddenUntil: number             // exclusive tick deadline; leaving grass ends concealment
+  hideAvailableAt: number         // cooldown prevents repeatedly entering grass for immunity
   lastKnownResourcePos?: Position  // memory: last spotted resource location
 }
 
@@ -67,6 +70,7 @@ export interface WorldConfig {
   agentCount: number
   resourceDensity: number  // 0-1
   obstacleDensity: number  // 0-1
+  grassDensity?: number   // 0-1; defaults to 0.06
   defaultTraits: Partial<AgentTraits>
   deathZoneStart: number   // tick when the death zone begins shrinking
 }

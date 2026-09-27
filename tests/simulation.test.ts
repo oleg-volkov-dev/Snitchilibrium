@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createAgent, getOrInitRelation, randomizeTraits } from '../src/simulation/agent'
+import { createAgent, decideAction, getOrInitRelation, randomizeTraits } from '../src/simulation/agent'
 import { createSimulation, stepSimulation } from '../src/simulation/engine'
 import { AGENT_PRESETS } from '../src/simulation/presets'
 import { normalizeTraits } from '../src/simulation/traits'
 import { AgentTraits, SimulationConfig } from '../src/simulation/types'
 import { useSimulationStore } from '../src/store/simulationStore'
+import { HIDE_DURATION, isHidden } from '../src/simulation/concealment'
+import { createGrid, isPassable, spawnResources } from '../src/simulation/world'
+import { DEATH_ZONE_START, getSafeRadius } from '../src/simulation/utils'
 
 const config: SimulationConfig = {
-  world: { width: 10, height: 10, agentCount: 2, resourceDensity: 0, obstacleDensity: 0, defaultTraits: {}, deathZoneStart: 1500 },
+  world: { width: 10, height: 10, agentCount: 2, resourceDensity: 0, obstacleDensity: 0, grassDensity: 0, defaultTraits: {}, deathZoneStart: 800 },
   tickIntervalMs: 300, maxTicks: 5000, usePresetAgents: false,
 }
 const zero: AgentTraits = { aggression: 0, trust: 0, loyalty: 0, greed: 0, riskTolerance: 0, memory: 0, irrationality: 0, intellect: 0 }
@@ -22,6 +25,147 @@ function assertBudget(traits: AgentTraits) {
   assert.ok(values.every(value => Number.isFinite(value) && value >= 0 && value <= 1))
   assert.ok(Math.abs(values.reduce((sum, value) => sum + value, 0) - 3.5) < 1e-10)
 }
+
+test('the death zone defaults to tick 800', () => {
+  assert.equal(DEATH_ZONE_START, 800)
+  assert.equal(useSimulationStore.getState().config.world.deathZoneStart, 800)
+  assert.equal(getSafeRadius(799, 40, 30), Infinity)
+  assert.ok(Number.isFinite(getSafeRadius(800, 40, 30)))
+})
+
+test('grass is passable cover and resource spawning preserves it', () => {
+  fixedRandom(.05, () => {
+    const grid = createGrid({ ...config.world, grassDensity: .1 })
+    assert.ok(grid.flat().every(cell => cell.type === 'grass'))
+    assert.equal(isPassable(grid, { x: 0, y: 0 }), true)
+    spawnResources(grid, 1)
+    assert.ok(grid.flat().every(cell => cell.type === 'grass'))
+  })
+})
+
+test('a wounded agent enters reachable grass and immediately escapes targeting', () => {
+  const state = createSimulation(config)
+  const runner = createAgent('r', 'Runner', { x: 2, y: 2 }, '#fff', zero)
+  const hunter = createAgent('h', 'Hunter', { x: 3, y: 2 }, '#fff', { ...zero, aggression: 1, riskTolerance: 1 })
+  runner.health = 25
+  state.agents = [runner, hunter]
+  state.grid[1][2] = { type: 'grass' }
+  const before = JSON.stringify(state)
+  fixedRandom(.99, () => {
+    const next = stepSimulation(state)
+    assert.deepEqual(next.agents[0].position, { x: 2, y: 1 })
+    assert.equal(next.agents[0].health, 25)
+    assert.equal(next.agents[0].hiddenUntil, next.tick + HIDE_DURATION)
+    assert.equal(isHidden(next.agents[0], next.grid, next.tick), true)
+    assert.ok(next.events.some(event => event.action === 'hide'))
+    assert.ok(next.events.every(event => event.action !== 'attack'))
+    assert.equal(JSON.stringify(state), before)
+  })
+})
+
+test('concealment protects for exactly 30 ticks then expires even without leaving grass', () => {
+  let state = createSimulation(config)
+  const hunter = createAgent('h', 'Hunter', { x: 2, y: 2 }, '#fff', { ...zero, aggression: 1, riskTolerance: 1 })
+  const runner = createAgent('r', 'Runner', { x: 3, y: 2 }, '#fff', zero)
+  runner.health = 70
+  runner.hiddenUntil = 31
+  runner.hideAvailableAt = 61
+  state.agents = [hunter, runner]
+  state.grid = state.grid.map(row => row.map(() => ({ type: 'obstacle' })))
+  state.grid[2][2] = { type: 'empty' }
+  state.grid[2][3] = { type: 'grass' }
+  fixedRandom(.99, () => {
+    for (let i = 0; i < 30; i++) {
+      state = stepSimulation(state)
+      assert.equal(state.agents[1].health, 70)
+      assert.equal(isHidden(state.agents[1], state.grid, state.tick), true)
+    }
+    state = stepSimulation(state)
+    assert.equal(isHidden(state.agents[1], state.grid, state.tick), false)
+    assert.ok(state.agents[1].health < 70)
+    assert.ok(state.events.some(event => event.tick === 31 && event.action === 'attack'))
+  })
+})
+
+test('shared ally vision cannot reveal hidden targets or make hunters pursue them', () => {
+  const grid = createGrid(config.world)
+  const hunter = createAgent('h', 'Hunter', { x: 1, y: 1 }, '#fff', { ...zero, aggression: 1, riskTolerance: 1 })
+  const scout = createAgent('s', 'Scout', { x: 6, y: 1 }, '#fff', zero)
+  const target = createAgent('t', 'Target', { x: 7, y: 1 }, '#fff', zero)
+  getOrInitRelation(hunter, scout.id).allied = true
+  grid[1][7] = { type: 'grass' }
+  fixedRandom(.99, () => {
+    assert.deepEqual(decideAction(hunter, [hunter, scout, target], grid, 1, 0).targetPos, { x: 2, y: 1 })
+    target.hiddenUntil = 31
+    const hiddenAction = decideAction(hunter, [hunter, scout, target], grid, 1, 0)
+    const noTargetAction = decideAction(hunter, [hunter, scout], grid, 1, 0)
+    assert.deepEqual(hiddenAction, noTargetAction)
+    assert.notDeepEqual(hiddenAction.targetPos, { x: 2, y: 1 })
+    // Adjacent targets must also disappear from attack and alliance candidates.
+    target.position = { x: 2, y: 1 }
+    grid[1][2] = { type: 'grass' }
+    assert.notEqual(decideAction(hunter, [hunter, target], grid, 1, 0).type, 'attack')
+    hunter.traits.trust = 1
+    assert.notEqual(decideAction(hunter, [hunter, target], grid, 1, 0).type, 'offer-alliance')
+  })
+})
+
+test('moving through grass preserves the deadline; leaving and reentering cannot bypass cooldown', () => {
+  let state = createSimulation(config)
+  const runner = createAgent('r', 'Runner', { x: 1, y: 1 }, '#fff', zero)
+  runner.health = 25
+  runner.hiddenUntil = 31
+  runner.hideAvailableAt = 61
+  state.tick = 1
+  state.agents = [runner, createAgent('h', 'Hunter', { x: 9, y: 9 }, '#fff', zero)]
+  state.grid[1][1] = { type: 'grass' }
+  state.grid[1][2] = { type: 'grass' }
+  state.grid[1][4] = { type: 'resource', resourceAmount: 10 }
+  fixedRandom(.99, () => {
+    state = stepSimulation(state)
+    assert.deepEqual(state.agents[0].position, { x: 2, y: 1 })
+    assert.equal(state.agents[0].hiddenUntil, 31)
+    state = stepSimulation(state)
+    assert.deepEqual(state.agents[0].position, { x: 3, y: 1 })
+    assert.equal(state.agents[0].hiddenUntil, 0)
+    state.grid[1][4] = { type: 'grass' }
+    state.agents[1].position = { x: 2, y: 1 }
+    state.grid[0][3] = { type: 'obstacle' }
+    state.grid[2][3] = { type: 'obstacle' }
+    state = stepSimulation(state)
+    assert.deepEqual(state.agents[0].position, { x: 4, y: 1 })
+    assert.equal(isHidden(state.agents[0], state.grid, state.tick), false)
+    state.tick = 60
+    state.agents[0].position = { x: 3, y: 1 }
+    state.agents[1].position = { x: 2, y: 1 }
+    state = stepSimulation(state)
+    assert.equal(isHidden(state.agents[0], state.grid, state.tick), true)
+    assert.equal(state.agents[0].hiddenUntil, 91)
+  })
+})
+
+test('hidden agents can heal but still take death-zone damage', () => {
+  let state = createSimulation(config)
+  const runner = createAgent('r', 'Runner', { x: 0, y: 0 }, '#fff', zero)
+  runner.health = 25
+  runner.resources = 20
+  runner.hiddenUntil = 31
+  state.agents = [runner, createAgent('h', 'Hunter', { x: 9, y: 9 }, '#fff', zero)]
+  state.grid[0][0] = { type: 'grass' }
+  state.grid[1][0] = { type: 'obstacle' }
+  state.grid[0][1] = { type: 'obstacle' }
+  fixedRandom(.99, () => {
+    state = stepSimulation(state)
+    assert.equal(state.agents[0].health, 55)
+    assert.equal(state.agents[0].resources, 0)
+    assert.equal(isHidden(state.agents[0], state.grid, state.tick), true)
+    state.tick = 1100
+    state.agents[0].hiddenUntil = 1130
+    state = stepSimulation(state)
+    assert.equal(state.agents[0].health, 52)
+    assert.equal(isHidden(state.agents[0], state.grid, state.tick), true)
+  })
+})
 
 test('all traits remain bounded with equal budgets, including zero and concentrated inputs', () => {
   assertBudget(normalizeTraits(zero))

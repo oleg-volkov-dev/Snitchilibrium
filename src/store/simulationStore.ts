@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { SimulationState, SimulationConfig } from '../simulation/types'
 import { createSimulation, stepSimulation } from '../simulation/engine'
+import { DEATH_ZONE_START } from '../simulation/utils'
 
 const DEFAULT_CONFIG: SimulationConfig = {
   world: {
@@ -10,7 +11,8 @@ const DEFAULT_CONFIG: SimulationConfig = {
     resourceDensity: 0.005,
     obstacleDensity: 0.06,
     defaultTraits: {},
-    deathZoneStart: 1500,
+    grassDensity: 0.06,
+    deathZoneStart: DEATH_ZONE_START,
   },
   tickIntervalMs: 300,
   maxTicks: 5000,

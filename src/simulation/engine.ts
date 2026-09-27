@@ -18,6 +18,7 @@ import {
 } from './agent'
 import { cellAt, createGrid, findEmptyPositions, spawnResources } from './world'
 import { AGENT_PRESETS } from './presets'
+import { HIDE_COOLDOWN, HIDE_DURATION, isHidden } from './concealment'
 import {
   agentColor,
   clamp,
@@ -107,7 +108,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   for (const agent of shuffle(liveAgents)) {
     if (!agent.alive) continue
     updateRelations(agent)
-    const action = decideAction(agent, liveAgents, newGrid, tick, standoffPressure, state.config.world.deathZoneStart)
+    const action = decideAction(agent, liveAgents, newGrid, tick + 1, standoffPressure, state.config.world.deathZoneStart)
     applyAction(agent, action, agentById, newGrid, posMap, tick + 1, newEvents)
 
     // Memory scan: update agent's last known resource position after acting
@@ -139,7 +140,7 @@ export function stepSimulation(state: SimulationState): SimulationState {
   // Death zone: shrinking circle that damages agents outside the safe radius
   const dzCols = newGrid[0].length
   const dzRows = newGrid.length
-  const safeRadius = getSafeRadius(tick, dzCols, dzRows, state.config.world.deathZoneStart)
+  const safeRadius = getSafeRadius(tick + 1, dzCols, dzRows, state.config.world.deathZoneStart)
   if (safeRadius !== Infinity) {
     const cx = (dzCols - 1) / 2
     const cy = (dzRows - 1) / 2
@@ -298,18 +299,33 @@ function applyAction(
     })
   }
 
+  // Check again when applying actions so hidden agents cannot be targeted indirectly.
+  const target = action.targetId ? agentById.get(action.targetId) : undefined
+  if (target && isHidden(target, grid, tick)) return
+  if (action.type !== 'move' && action.type !== 'idle' && action.type !== 'heal') {
+    agent.hiddenUntil = 0
+  }
+
   switch (action.type) {
     case 'move': {
       if (!action.targetPos) break
       const key = `${action.targetPos.x},${action.targetPos.y}`
       const destCell = grid[action.targetPos.y]?.[action.targetPos.x]
       if (!posMap.has(key) && destCell && destCell.type !== 'obstacle') {
+        const wasInGrass = cellAt(grid, agent.position)?.type === 'grass'
         posMap.delete(`${agent.position.x},${agent.position.y}`)
         // Keep up to 3 recent positions to detect oscillation cycles
         agent.positionHistory = [{ ...agent.position }, ...agent.positionHistory].slice(0, 3)
         agent.prevPosition = { ...agent.position }
         agent.position = action.targetPos
         posMap.set(key, agent.id)
+        if (destCell.type !== 'grass') {
+          agent.hiddenUntil = 0
+        } else if (!wasInGrass && tick >= agent.hideAvailableAt) {
+          agent.hiddenUntil = tick + HIDE_DURATION
+          agent.hideAvailableAt = agent.hiddenUntil + HIDE_COOLDOWN
+          log('hide', `${agent.name} hid in grass for up to ${HIDE_DURATION} ticks`)
+        }
         // Auto-collect resource on landing
         if (destCell?.type === 'resource' && (destCell.resourceAmount ?? 0) > 0) {
           const amount = destCell.resourceAmount ?? 0
@@ -348,7 +364,7 @@ function applyAction(
       // Alliance combat bonus: each allied agent adjacent to the target adds +50% damage
       const allLive = Array.from(agentById.values()).filter(a => a.alive)
       const supportingAllies = allLive.filter(
-        a => a.id !== agent.id && agent.relations[a.id]?.allied && distance(a.position, target.position) <= 1
+        a => a.id !== agent.id && agent.relations[a.id]?.allied && !isHidden(a, grid, tick) && distance(a.position, target.position) <= 1
       )
       if (supportingAllies.length > 0) {
         attackPower *= 1 + supportingAllies.length * 0.5
