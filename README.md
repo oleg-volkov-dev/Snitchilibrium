@@ -1,5 +1,7 @@
 # Snitchilibrium
 
+<img src="designs/Snitchilibrium_logo.png" alt="Project_Logo" width="500">
+
 A grid-based multi-agent simulation where autonomous agents gather resources, form alliances, betray each other, and compete under game-theoretic incentives.
 
 ## Run
