@@ -8,6 +8,7 @@ import paranoid from '../../designs/Paranoid.png'
 import vengeful from '../../designs/Vengeful.png'
 import expansionist from '../../designs/Expansionist.png'
 import manipulator from '../../designs/Manipulator.png'
+import titfortat from '../../designs/TitForTat.png'
 import chaotic from '../../designs/Chaotic.png'
 import oracle from '../../designs/Oracle.png'
 
@@ -23,6 +24,7 @@ export const agentArtwork = new Map<string, string>([
   ['Vengeful', vengeful],
   ['Expansionist', expansionist],
   ['Manipulator', manipulator],
+  ['TitForTat', titfortat],
   ['Chaotic', chaotic],
   ['Oracle', oracle],
 ])
