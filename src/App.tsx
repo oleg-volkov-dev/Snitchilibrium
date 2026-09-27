@@ -1,7 +1,6 @@
 import { Grid } from './components/Grid/Grid'
 import { Controls } from './components/Controls/Controls'
 import { Leaderboard } from './components/Leaderboard/Leaderboard'
-import { AgentPanel } from './components/AgentPanel/AgentPanel'
 import { ConfigPanel } from './components/ConfigPanel/ConfigPanel'
 import { WinnerBanner } from './components/WinnerBanner/WinnerBanner'
 import { RightPanel } from './components/RightPanel/RightPanel'
@@ -35,7 +34,6 @@ export function App() {
           <Controls />
           <ConfigPanel />
           <Leaderboard />
-          <AgentPanel />
         </aside>
         <main className={styles.main}>
           <div className={styles.arenaHeader}>

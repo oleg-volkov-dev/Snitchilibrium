@@ -128,7 +128,7 @@ export function ConfigPanel() {
           <div className={styles.fieldColumn}>
             <label>Resources</label>
             <div className={styles.btnGroup}>
-              {([['None', 0], ['Sparse', 0.005], ['Normal', 0.02], ['Rich', 0.05]] as const).map(([label, val]) => (
+              {([['None', 0], ['Sparse', 0.00625], ['Normal', 0.02], ['Rich', 0.05]] as const).map(([label, val]) => (
                 <button
                   type="button"
                   key={label}

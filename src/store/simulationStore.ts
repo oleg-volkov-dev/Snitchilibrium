@@ -8,7 +8,7 @@ const DEFAULT_CONFIG: SimulationConfig = {
     width: 35,
     height: 20,
     agentCount: 10,
-    resourceDensity: 0.005,
+    resourceDensity: 0.00625,
     obstacleDensity: 0.06,
     defaultTraits: {},
     grassDensity: 0.02,
